@@ -1,0 +1,51 @@
+[project]
+name = "rockpaperscissors"
+version = "0.1.0"
+description = "Enumerate and visualize fair generalizations of Rock-Paper-Scissors"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy",
+    "scipy",
+    "networkx",
+    "matplotlib",
+    "tqdm",
+    "mplcairo>=0.6.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "slow: large enumerations (n>=6 inclusive, n>=7 balanced, n=8 regular); deselect with -m 'not slow'",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["cache", "plots", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "E741",  # ambiguous variable names (M, l, etc. are fine here)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401"]  # allow unused imports in tests
