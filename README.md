@@ -8,7 +8,7 @@ Enumerate and visualize "fair" generalizations of Rock-Paper-Scissors on `n` str
 
 `regular ⊂ balanced ⊂ inclusive`. All three require the game to be paradoxical (every strategy wins and loses at least once) and decisively connected. Structures are counted up to graph isomorphism.
 
-Metrics computed per structure: `orbits` (structurally distinct strategies = automorphism orbits; two moves share an orbit iff some relabeling swaps them without changing the game), `|Aut|` (automorphism group size), articulation cuts, Gini of the equilibrium, tie fraction.
+Metrics computed per structure: `orbits` (structurally distinct strategies = automorphism orbits; two moves share an orbit iff some relabeling swaps them without changing the game), `|Aut|` (automorphism group size), articulation cuts, Gini of the equilibrium, tie fraction (over all `n²` matchups including the always-tie diagonal, so a tournament with no draws is `1/n`).
 
 ## Counts up to isomorphism
 

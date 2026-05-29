@@ -503,8 +503,8 @@ def equilibria_grid(M, path=None, ncols=4, labels=None, optimize_layout=True, dp
         f"n={len(M)}",
         f"orbits={num_orbits(M)}",
         f"n_eq={len(verts)}",
-        f"gini={gini(mm):.2f}",
         f"ties={tie_fraction(M):.2f}",
+        f"gini={gini(mm):.2f}",
         f"cuts={num_cuts(M)}",
     ]
     return grid(

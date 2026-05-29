@@ -1,0 +1,27 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # mplcairo is a declared dependency and may build from source on Python 3.14;
+      # give it the cairo/freetype headers it needs.
+      - name: Install system build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libfreetype-dev pkg-config
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (uv provisions Python 3.14)
+        run: uv sync
+
+      # `slow` tests are the large cold-cache enumerations (e.g. inclusive n=6);
+      # skip them in CI. Drop the `-m` flag to run the full suite.
+      - name: Run tests
+        run: uv run pytest -q -m "not slow"

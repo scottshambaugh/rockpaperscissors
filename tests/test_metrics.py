@@ -80,21 +80,23 @@ def test_num_cuts_path_has_articulation():
     assert num_cuts(M) == 1
 
 
-# --- tie_fraction ---
-def test_tie_fraction_tournament_is_zero():
-    assert tie_fraction(RPS) == 0.0
-    assert tie_fraction(RPSLS) == 0.0
-    assert tie_fraction(PALEY7) == 0.0
+# --- tie_fraction (includes the always-tie diagonal: contributes 1/n) ---
+def test_tie_fraction_tournament_is_one_over_n():
+    # no off-diagonal ties, so only the n diagonal self-ties count -> 1/n
+    assert tie_fraction(RPS) == pytest.approx(1 / 3)
+    assert tie_fraction(RPSLS) == pytest.approx(1 / 5)
+    assert tie_fraction(PALEY7) == pytest.approx(1 / 7)
 
 
 @pytest.mark.parametrize("n", [4, 5, 6, 7])
 def test_tie_fraction_ring_formula(n):
-    # ring: each node ties n-3 others -> tie fraction (n-3)/(n-1)
-    assert tie_fraction(ring(n)) == pytest.approx((n - 3) / (n - 1))
+    # ring: each node ties n-3 others, plus its own diagonal -> (n-2)/n over n*n
+    assert tie_fraction(ring(n)) == pytest.approx((n - 2) / n)
 
 
 def test_tie_fraction_cop():
-    assert tie_fraction(COP) == pytest.approx(1 / 6)  # one tie pair of six
+    # 4 diagonal + one off-diagonal tie pair (2 cells) of 16 -> 6/16
+    assert tie_fraction(COP) == pytest.approx(6 / 16)
 
 
 # --- gini ---

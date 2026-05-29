@@ -92,6 +92,10 @@ def gini(xs):
 
 
 def tie_fraction(M):
-    """Fraction of off-diagonal entries that are ties."""
+    """Fraction of all n*n matchups that are ties, including the diagonal.
+
+    Each move ties itself, so the n diagonal cells always count as ties and
+    contribute 1/n; a tournament (no off-diagonal ties) has tie fraction 1/n.
+    """
     n = len(M)
-    return int((M == 0).sum() - n) / (n * (n - 1))
+    return int((M == 0).sum()) / (n * n)

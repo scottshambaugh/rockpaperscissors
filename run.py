@@ -99,7 +99,7 @@ def report_and_plot(
         )
         print(
             f"  #{i:<2d} orbits={r['orbits']} |Aut|={r['aut']} "
-            f"gini={r['gini']:.2f} ties={r['ties']:.2f} cuts={r['cuts']} {core_tag} {eq_tag}"
+            f"ties={r['ties']:.2f} gini={r['gini']:.2f} cuts={r['cuts']} {core_tag} {eq_tag}"
         )
     if ranked:
         print("  Top structure (#1):")
@@ -109,10 +109,10 @@ def report_and_plot(
 
     def title(i, r):
         # gini varies only when the equilibrium is non-uniform (inclusive)
-        parts = [f"#{i + 1}", f"orbits={r['orbits']}", f"n_eq={r['nverts']}"]
+        # order follows the sort key: orbits, then ties, then gini
+        parts = [f"#{i + 1}", f"orbits={r['orbits']}", f"n_eq={r['nverts']}", f"ties={r['ties']:.2f}"]
         if PERCENTAGES[kind]:
             parts.append(f"gini={r['gini']:.2f}")
-        parts.append(f"ties={r['ties']:.2f}")
         if r["cuts"]:
             parts.append(f"cuts={r['cuts']}")
         return " ".join(parts)
