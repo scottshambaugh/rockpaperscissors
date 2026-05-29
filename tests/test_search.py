@@ -115,6 +115,23 @@ def test_skew_symmetric_and_zero_diagonal():
         assert (np.diag(M) == 0).all()
 
 
+@pytest.mark.parametrize(
+    "search,n",
+    [(search_regular, 6), (search_balanced_fast, 6), (search_inclusive, 5)],
+)
+def test_every_equilibrium_vertex_is_in_the_kernel(search, n):
+    # For fair (paradoxical, connected) games O = ker(M) ∩ Δ: every extreme
+    # equilibrium satisfies M v = 0 exactly, not merely M v <= 0. (Not true for
+    # skew-symmetric games at large -- a dominated move breaks it -- so this is a
+    # property of the category, and the null-space recipe is sufficient here.)
+    from rpsfair import equilibrium_vertices
+
+    for M, _ in search(n):
+        A = M.astype(float)
+        for v in equilibrium_vertices(M):
+            assert np.allclose(A @ v, 0.0, atol=1e-9)
+
+
 def test_nested_subsets_regular_in_balanced_in_inclusive():
     # every regular game is balanced; every balanced game is inclusive (up to iso)
     for n in [4, 5]:

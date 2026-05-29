@@ -1,0 +1,452 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\simplex}{\Delta}
+\newcommand{\ones}{\mathbf{1}}
+\newcommand{\zero}{\mathbf{0}}
+\DeclareMathOperator{\rank}{rank}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{definition}
+\newtheorem{example}{Example}
+
+\title{Finding the equilibrium endpoints of a fair Rock--Paper--Scissors game}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+This note walks through how the symmetric Nash equilibria of a ``fair'' generalized
+Rock--Paper--Scissors game are computed, and in particular how to find the
+\emph{endpoints} (extreme points / vertices) of the equilibrium set. The running
+example is the $n=4$ ``cop'' game, whose equilibrium set is a line segment with two
+endpoints.
+
+\section{Setup}
+
+A game on $n$ moves is encoded by an $n\times n$ \emph{antisymmetric} sign matrix
+$A=M$ with $A=-A^{\mathsf T}$ and entries $A_{ij}\in\{-1,0,+1\}$: row $i$ beats
+column $j$ when $A_{ij}=+1$, loses when $A_{ij}=-1$, ties when $A_{ij}=0$. Because
+the game is symmetric and zero-sum, its value is $0$ and
+\[
+  p^{\mathsf T} A\, p = 0 \qquad \text{for every } p .
+\]
+
+A mixed strategy is a point of the probability simplex
+\[
+  \simplex \;=\; \bigl\{\, p\in\R^n : p_i\ge 0,\ \textstyle\sum_i p_i = 1 \,\bigr\}.
+\]
+A strategy $p$ is a (symmetric) Nash equilibrium iff it is a best response to
+itself, i.e.\ no pure move earns a positive payoff against it:
+\[
+  (A p)_i \;\le\; p^{\mathsf T} A\, p \;=\; 0 \qquad\text{for all } i .
+\]
+Hence the equilibrium set is the polytope
+\begin{equation}\label{eq:O}
+  O \;=\; \bigl\{\, p\in\simplex : A p \le \zero \,\bigr\}.
+\end{equation}
+$O$ is convex, so the full set of equilibria is the convex hull of its
+\emph{vertices}. ``How many solutions'' a game has is the number of those vertices:
+$1$ means a unique equilibrium, $2$ means a segment, more means a polygon or
+higher-dimensional polytope.
+
+\section{Fully-mixed equilibria live in the kernel}
+
+If $p$ is \emph{fully mixed} ($p_i>0$ for all $i$), then complementary slackness
+forces equality everywhere: since
+\[
+  0 \;=\; p^{\mathsf T} A p \;=\; \sum_i p_i\,(Ap)_i,
+\]
+with every $p_i>0$ and every $(Ap)_i\le 0$, each term must vanish, so $(Ap)_i=0$ for
+all $i$. Therefore
+\[
+  \text{a fully-mixed equilibrium}\ \Longrightarrow\ A p = \zero,
+  \qquad\text{i.e.}\qquad p\in\ker(A).
+\]
+The fully-mixed equilibria are exactly the strictly positive vectors of $\ker(A)$,
+rescaled to sum to $1$.
+
+\begin{theorem}[Parity]\label{thm:parity}
+A real antisymmetric matrix has even rank. Consequently
+$\dim\ker(A) = n-\rank(A)$ has the same parity as $n$, and a fully-mixed
+equilibrium can be \emph{unique} (i.e.\ $\dim\ker(A)=1$) only when $n$ is odd. For
+even $n$ a fully-mixed equilibrium is never isolated: it sits in a family of
+dimension $\dim\ker(A)-1\ge 1$.
+\end{theorem}
+
+\begin{proof}[Why the rank is even]
+The eigenvalues of a real antisymmetric matrix are purely imaginary and occur in
+conjugate pairs $\pm i\lambda$; equivalently $A$ is orthogonally similar to a
+block-diagonal matrix of $2\times2$ blocks
+$\left(\begin{smallmatrix}0&\lambda\\-\lambda&0\end{smallmatrix}\right)$ plus a zero
+block. Each nonzero block contributes $2$ to the rank, so $\rank(A)$ is even.
+\end{proof}
+
+\section{Worked example: the cop game}
+
+Label the moves $\text{Cop}=0$, $\text{K\!-\!9}=1$, $\text{Perp}=2$,
+$\text{Witness}=3$, with
+\[
+  \text{Witness}\!>\!\text{Cop},\quad
+  \text{Cop}\!>\!\text{Perp},\quad
+  \text{Cop}\!>\!\text{K\!-\!9},\quad
+  \text{K\!-\!9}\!>\!\text{Perp},\quad
+  \text{Perp}\!>\!\text{Witness},
+\]
+and the single tie $\text{K\!-\!9}$ vs.\ $\text{Witness}$. With $A_{ij}=+1$ when $i$
+beats $j$,
+\[
+  A \;=\;
+  \begin{pmatrix}
+     0 &  1 &  1 & -1 \\
+    -1 &  0 &  1 &  0 \\
+    -1 & -1 &  0 &  1 \\
+     1 &  0 & -1 &  0
+  \end{pmatrix}.
+\]
+
+\subsection{Step 1 --- write the homogeneous system}
+
+The fully-mixed equilibria satisfy $Ap=\zero$. Multiplying $A$ by the unknown vector
+$p=(p_0,p_1,p_2,p_3)^{\mathsf T}$ and reading off one equation per row:
+\[
+  \begin{aligned}
+    \text{(row $0$, Cop)}    &: & 0\,p_0 + 1\,p_1 + 1\,p_2 - 1\,p_3 &= 0,\\
+    \text{(row $1$, K\!-\!9)}&: & -1\,p_0 + 0\,p_1 + 1\,p_2 + 0\,p_3 &= 0,\\
+    \text{(row $2$, Perp)}   &: & -1\,p_0 - 1\,p_1 + 0\,p_2 + 1\,p_3 &= 0,\\
+    \text{(row $3$, Witness)}&: & 1\,p_0 + 0\,p_1 - 1\,p_2 + 0\,p_3 &= 0.
+  \end{aligned}
+\]
+
+\subsection{Step 2 --- row reduce \texorpdfstring{$A$}{A} to find the kernel}
+
+Work on $A$ directly (the right-hand side stays $\zero$ throughout). Write the rows
+as $R_0,\dots,R_3$:
+\[
+  \left[\begin{array}{rrrr}
+     0 &  1 &  1 & -1 \\
+    -1 &  0 &  1 &  0 \\
+    -1 & -1 &  0 &  1 \\
+     1 &  0 & -1 &  0
+  \end{array}\right]
+  \xrightarrow{\;R_0\leftrightarrow R_3\;}
+  \left[\begin{array}{rrrr}
+     1 &  0 & -1 &  0 \\
+    -1 &  0 &  1 &  0 \\
+    -1 & -1 &  0 &  1 \\
+     0 &  1 &  1 & -1
+  \end{array}\right].
+\]
+Now clear column $0$ below the pivot in row $0$ with
+$R_1\!\leftarrow\!R_1+R_0$ and $R_2\!\leftarrow\!R_2+R_0$:
+\[
+  \left[\begin{array}{rrrr}
+     1 &  0 & -1 &  0 \\
+     0 &  0 &  0 &  0 \\
+     0 & -1 & -1 &  1 \\
+     0 &  1 &  1 & -1
+  \end{array}\right]
+  \xrightarrow{\;R_1\leftrightarrow R_3\;}
+  \left[\begin{array}{rrrr}
+     1 &  0 & -1 &  0 \\
+     0 &  1 &  1 & -1 \\
+     0 & -1 & -1 &  1 \\
+     0 &  0 &  0 &  0
+  \end{array}\right].
+\]
+Finally clear column $1$ with $R_2\!\leftarrow\!R_2+R_1$:
+\[
+  \left[\begin{array}{rrrr}
+     1 &  0 & -1 &  0 \\
+     0 &  1 &  1 & -1 \\
+     0 &  0 &  0 &  0 \\
+     0 &  0 &  0 &  0
+  \end{array}\right]
+  \;=\; \operatorname{RREF}(A).
+\]
+There are two nonzero rows, so $\rank(A)=2$ and
+\[
+  \dim\ker(A) \;=\; n-\rank(A) \;=\; 4-2 \;=\; 2,
+\]
+consistent with Theorem~\ref{thm:parity} ($n=4$ even $\Rightarrow$ rank even).
+
+\subsection{Step 3 --- read off the kernel basis}
+
+The two nonzero rows give the relations
+\[
+  p_0 - p_2 = 0,
+  \qquad\qquad
+  p_1 + p_2 - p_3 = 0.
+\]
+Since the rank is $2$, two of the four unknowns are free. We choose $p_1$ and $p_2$
+as the free parameters (this is the choice that makes the final answer cleanest) and
+solve the two relations for the remaining two:
+\[
+  p_0 = p_2,
+  \qquad\qquad
+  p_3 = p_1 + p_2.
+\]
+Set each free variable to $1$ in turn (the other to $0$) to get a basis of $\ker(A)$:
+\[
+  \begin{aligned}
+    p_1=1,\ p_2=0:\quad & p_0=0,\ p_3=1 & &\Rightarrow\quad v_1=(0,1,0,1),\\
+    p_1=0,\ p_2=1:\quad & p_0=1,\ p_3=1 & &\Rightarrow\quad v_2=(1,0,1,1).
+  \end{aligned}
+\]
+A quick check: $A v_1 = \zero$ and $A v_2=\zero$ (e.g.\ row $0$ on $v_2$ gives
+$0\cdot1+1\cdot0+1\cdot1-1\cdot1=0$). Writing $b:=p_1$ and $a:=p_2$, every kernel
+vector is
+\begin{equation}\label{eq:family}
+  p \;=\; b\,v_1 + a\,v_2 \;=\; (a,\ b,\ a,\ a+b).
+\end{equation}
+
+\subsection{Step 4 --- impose the simplex}
+
+A strategy must satisfy $\ones^{\mathsf T}p=1$ and $p\ge\zero$. Summing the
+components of \eqref{eq:family},
+\[
+  p_0+p_1+p_2+p_3 \;=\; a + b + a + (a+b) \;=\; 3a + 2b ,
+\]
+so the normalization condition is
+\begin{equation}\label{eq:segment}
+  3a+2b=1, \qquad a\ge 0,\ b\ge 0 .
+\end{equation}
+The single linear equation $3a+2b=1$ cuts the $2$-dimensional kernel down to a
+$1$-dimensional line in the $(a,b)$-plane; the inequalities $a\ge0$, $b\ge0$ clip
+that line to a bounded \textbf{segment}. The equilibrium set is therefore a
+$1$-dimensional family, matching $\dim\ker(A)-1 = 2-1 = 1$.
+
+\section{Finding the endpoints}
+
+A point of the segment \eqref{eq:segment} is an \emph{endpoint} (vertex) exactly when
+one of the two non-negativity constraints becomes tight --- i.e.\ $a=0$ or $b=0$.
+Setting each to equality in turn and solving the remaining $1$-variable equation:
+
+\paragraph{Endpoint 1: $b=0$.}
+The constraint $3a+2b=1$ becomes $3a=1$, so
+\[
+  a=\tfrac13,\qquad b=0 .
+\]
+Substituting into \eqref{eq:family} ($p=(a,b,a,a+b)$):
+\[
+  p^{(1)} \;=\; \bigl(\tfrac13,\ 0,\ \tfrac13,\ \tfrac13\bigr).
+\]
+This drops K\!-\!9 ($p_1=0$).
+
+\paragraph{Endpoint 2: $a=0$.}
+Now $3a+2b=1$ becomes $2b=1$, so
+\[
+  a=0,\qquad b=\tfrac12 .
+\]
+Substituting into \eqref{eq:family}:
+\[
+  p^{(2)} \;=\; \bigl(0,\ \tfrac12,\ 0,\ \tfrac12\bigr).
+\]
+This drops Cop and Perp ($p_0=p_2=0$).
+
+\subsection{Verify each endpoint is an equilibrium}
+
+Each endpoint must satisfy the equilibrium condition $Ap\le\zero$. Because both lie
+in $\ker(A)$ by construction, we should in fact get $Ap=\zero$ exactly. Check
+$p^{(1)}=(\tfrac13,0,\tfrac13,\tfrac13)$ row by row:
+\[
+  Ap^{(1)} =
+  \begin{pmatrix}
+    0(\tfrac13)+1(0)+1(\tfrac13)-1(\tfrac13)\\[2pt]
+    -1(\tfrac13)+0(0)+1(\tfrac13)+0(\tfrac13)\\[2pt]
+    -1(\tfrac13)-1(0)+0(\tfrac13)+1(\tfrac13)\\[2pt]
+    1(\tfrac13)+0(0)-1(\tfrac13)+0(\tfrac13)
+  \end{pmatrix}
+  =
+  \begin{pmatrix}0\\0\\0\\0\end{pmatrix} \;\le\;\zero. \checkmark
+\]
+Similarly for $p^{(2)}=(0,\tfrac12,0,\tfrac12)$:
+\[
+  Ap^{(2)} =
+  \begin{pmatrix}
+    1(\tfrac12)-1(\tfrac12)\\[2pt]
+    0\\[2pt]
+    -1(\tfrac12)+1(\tfrac12)\\[2pt]
+    0
+  \end{pmatrix}
+  =
+  \begin{pmatrix}0\\0\\0\\0\end{pmatrix} \;\le\;\zero. \checkmark
+\]
+
+Every fully-mixed (strictly interior) equilibrium is a convex combination
+$\lambda\,p^{(1)} + (1-\lambda)\,p^{(2)}$ with $0<\lambda<1$ --- the open interior of
+the segment. The endpoints themselves are boundary equilibria, each leaving out at
+least one move.
+
+\subsection{Picking the canonical point: leximin, step by step}
+
+To report a single set of odds we take the leximin (max--min) point: the equilibrium
+that maximizes the smallest play rate. On the segment the four coordinates are
+$(a,\ b,\ a,\ a+b)$. Since $a,b\ge0$ we have $a+b\ge a$ and $a+b\ge b$, so the
+smallest coordinate is
+\[
+  \min_i p_i \;=\; \min(a,\,b).
+\]
+We maximize $m:=\min(a,b)$ subject to $3a+2b=1$.
+
+\emph{Upper bound.} Any feasible point has $a\ge m$ and $b\ge m$, hence
+\[
+  1 \;=\; 3a+2b \;\ge\; 3m+2m \;=\; 5m
+  \qquad\Longrightarrow\qquad m \;\le\; \tfrac15 .
+\]
+\emph{Attainability.} The bound is met by balancing the two free variables, $a=b$:
+\[
+  3a+2a = 5a = 1 \quad\Longrightarrow\quad a=b=\tfrac15,
+\]
+which gives $\min(a,b)=\tfrac15$. Substituting $a=b=\tfrac15$ into
+\eqref{eq:family}:
+\[
+  p^\star \;=\; \bigl(\tfrac15,\ \tfrac15,\ \tfrac15,\ \tfrac25\bigr)
+          \;=\; (0.2,\ 0.2,\ 0.2,\ 0.4).
+\]
+This is the midpoint-in-spirit of the segment --- the equilibrium farthest from every
+boundary face --- guaranteeing each move at least a $20\%$ play rate.
+
+\begin{proposition}[Endpoints always touch the boundary]
+If the equilibrium family has positive dimension, every one of its vertices lies on a
+face $\{p_i=0\}$ of the simplex. Equivalently, a vertex of $O$ can be strictly
+interior only when $\dim\ker(A)=1$ (the unique-equilibrium, odd-$n$ case).
+\end{proposition}
+
+\begin{proof}[Sketch]
+Within the hyperplane $\ones^{\mathsf T}p=1$, a vertex is a point where $n-1$ of the
+facet inequalities $\{p_i\ge0\}\cup\{(Ap)_i\le0\}$ are active with linearly
+independent normals. An interior point ($p_i>0$ for all $i$) activates none of the
+$p_i\ge0$ facets, so all $n-1$ active facets must come from $(Ap)_i=0$. But an
+interior equilibrium already has $Ap=\zero$, and for the active rows of $A$ together
+with $\ones$ to span $\R^n$ one needs $\rank(A)=n-1$, i.e.\ $\dim\ker(A)=1$. Hence
+when $\dim\ker(A)\ge 2$ no vertex is interior. \qed
+\end{proof}
+
+\section{The general recipe}
+
+For an arbitrary fair game $A$, the same procedure finds all extreme equilibria:
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Kernel.} Solve $Ap=\zero$ (compute $\ker A$ via its null space) to
+  parametrize the candidate fully-mixed equilibria.
+  \item \textbf{Normalize and clip.} Intersect $\ker A$ with the simplex
+  $\{\ones^{\mathsf T}p=1,\ p\ge\zero\}$.
+  \item \textbf{Enumerate vertices.} A vertex of $O$ in \eqref{eq:O} is the unique
+  solution of the $n\times n$ system formed by $\ones^{\mathsf T}p=1$ together with
+  $n-1$ tight facets chosen from $\{p_i=0\}\cup\{(Ap)_i=0\}$ whose normals are
+  linearly independent; keep each solution that is feasible
+  ($p\ge\zero$, $Ap\le\zero$), and deduplicate. The number of distinct vertices is
+  the number of solutions of the game.
+\end{enumerate}
+
+For the cop game this yields exactly the two endpoints above. More symmetric games
+(RPS, RPSLS, the Paley tournament $Q_7$) have $\dim\ker(A)=1$ and a single vertex ---
+the unique uniform equilibrium --- while larger even-$n$ games can have equilibrium
+\emph{polygons} with several vertices.
+
+\paragraph{Canonical representative.}
+When the equilibrium set is not a single point, a canonical representative is needed
+to report ``the odds.'' We use the \emph{leximin} (max--min) point: maximize the
+smallest play rate, then the next, and so on. For the cop game this is the centre
+$(\tfrac15,\tfrac15,\tfrac15,\tfrac25)=(0.2,0.2,0.2,0.4)$ --- the point of the segment
+farthest from every boundary face, guaranteeing each move at least a $20\%$ play
+rate.
+
+\section{Modular decomposition: how the equilibrium count factorizes}
+
+Many games are not ``new'': they are a smaller game with some moves replaced by
+whole sub-games. Modular decomposition makes this precise and shows that the number
+of equilibria multiplies over the construction.
+
+\subsection{Modules and substitution}
+
+A \emph{module} is a set of moves $S\subseteq V$ that every outside move relates to
+identically: for each $x\notin S$ the sign $A_{x,a}$ is the same for all $a\in S$ (so
+$x$ beats all of $S$, loses to all of $S$, or ties all of $S$). A tie-twin pair is
+exactly a size-$2$ all-tie module. A game with no module other than singletons and
+$V$ is \textbf{modular-prime}; otherwise it is a \emph{substitution}
+\[
+  G \;=\; H[M_1,\dots,M_k],
+\]
+where the \emph{quotient} $H$ is a $k\times k$ game on the modules and move $i$ of $H$
+is blown up into the sub-game $M_i$. The relation between two modules is well defined
+(a single sign), so $H$ is itself a skew $\{-1,0,+1\}$ game.
+
+\subsection{The factorization law}
+
+Write a strategy of $G$ as a mass $w_i$ on each module $i$ together with a conditional
+distribution $q_i$ inside it. For a move $a\in M_j$,
+\[
+  (A_G\,p)_a \;=\; \underbrace{\sum_{i\ne j} h_{ji}\,w_i}_{E_j\ (\text{same for all }a\in M_j)}
+                 \;+\; w_j\,(A_{M_j} q_j)_a ,
+\]
+because every move of $M_j$ sees the other modules identically (that is the module
+property), and $h_{ji}=(A_H)_{ji}$ is the quotient sign. Summing the equilibrium
+conditions over the support of module $j$, weighted by $q_j$, and using
+$q_j^{\mathsf T} A_{M_j} q_j = 0$, gives $E_j=0$ on every played module. Hence
+\[
+  p \text{ is an equilibrium of } G
+  \;\Longleftrightarrow\;
+  w \text{ is an equilibrium of } H,\ \text{ and each played } q_j \text{ is an equilibrium of } M_j .
+\]
+So the equilibrium polytope is a product, $O(G)=O(H)\times\prod_j O(M_j)$, and its
+vertices are products of vertices:
+\begin{equation}\label{eq:factor}
+  n_{eq}(G) \;=\; \sum_{\text{vertices } w \text{ of } O(H)} \ \prod_{j\in\operatorname{supp}(w)} n_{eq}(M_j).
+\end{equation}
+When the quotient has a \emph{unique, fully supported} equilibrium (e.g.\ RPS, RPSLS),
+\eqref{eq:factor} collapses to the clean product $n_{eq}(G)=\prod_j n_{eq}(M_j)$.
+
+\subsection{Reading off the special cases}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{All-tie quotient} ($H=\zero$, the $k$ modules mutually tie): $O(H)$ is
+  the whole simplex, whose vertices are the $k$ unit vectors, so
+  $n_{eq}=\sum_j n_{eq}(M_j)$. A tie-twin pair is the case $k=2$ with single moves:
+  $n_{eq}=1+1=2$.
+  \item \textbf{Transitive (``order'') quotient}: a dominant module is played purely,
+  so $n_{eq}$ equals that module's count.
+  \item \textbf{Prime quotient}: the general mixed sum~\eqref{eq:factor}.
+\end{itemize}
+The decomposition is recursive --- modules nest --- so $n_{eq}$ is computed bottom-up
+over the decomposition tree.
+
+\subsection{Worked example: the $n=6$ game with eight equilibria}
+
+Take RPS and replace each of its three moves by a tie-twin pair:
+$G=\mathrm{RPS}[\,\text{tie}_2,\ \text{tie}_2,\ \text{tie}_2\,]$ on $n=6$ moves. The
+quotient is RPS, which has the unique fully-supported equilibrium
+$(\tfrac13,\tfrac13,\tfrac13)$, and each module is an all-tie pair with
+$n_{eq}(\text{tie}_2)=2$. By~\eqref{eq:factor},
+\[
+  n_{eq}(G) \;=\; n_{eq}(\mathrm{RPS})\cdot 2\cdot 2\cdot 2 \;=\; 1\cdot 8 \;=\; 8 .
+\]
+Each vertex chooses, for every twin pair, which copy carries that pair's $\tfrac13$
+mass --- the $2^3=8$ corners. The leximin point instead splits each pair evenly,
+giving the uniform $\tfrac16$ on all six moves (the centre of the polytope).
+
+\subsection{Why this is the right notion of ``irreducible''}
+
+The blow-up in \eqref{eq:factor} is purely a substitution effect, so the games with
+many equilibria are exactly the heavily-substituted ones. Twin-free only forbids
+all-tie size-$2$ modules; it still admits substituting a prime sub-game with
+$n_{eq}\ge 2$ (e.g.\ a cop module), which is why
+$\mathrm{RPSLS}[\text{cop}^{\times 5}]$ is twin-free yet has $n_{eq}=2^5=32>20=n$.
+Modular-prime games --- no module at all --- are the genuine irreducible atoms;
+empirically every prime fair game enumerated satisfies $n_{eq}\le n$, while the
+twin-free bound is false. The ring games $C_n$ (each move beats the next, ties the
+rest) are prime for all $n\ge 3$: any proper subset has a boundary move that an
+outside neighbour beats while it ties the interior, so no nontrivial module exists.
+
+\end{document}

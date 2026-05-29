@@ -18,6 +18,8 @@ coincides with the usual answer whenever O is a single point. `max_entropy_equil
 offers a structure-weighted alternative.
 """
 
+from itertools import combinations
+
 import numpy as np
 from scipy.optimize import linprog, minimize
 
@@ -101,6 +103,14 @@ def maxmin_equilibrium(M, tol=1e-7):
     rest. The result is unique and lands on clean rationals for these {-1,0,+1}
     games -- e.g. the cop game gives exactly (0.2, 0.2, 0.2, 0.4).
 
+    A single max-min LP can leave a flat optimal face, so at each stage we (a)
+    compute the current minimum level t*, (b) pin every free coordinate that cannot
+    exceed t* while the others are held at the floor t*, then (c) recurse on the rest
+    with t* as a hard floor. Pinning against the *numeric* floor t* (not a free LP
+    variable) is what makes it balance every independent group at its own scale --
+    two unrelated free directions each get evened out rather than one absorbing all
+    the slack.
+
     For a fully-mixed game the optimum is interior (A p = 0); when no fully-mixed
     equilibrium exists it returns the leximin boundary equilibrium. Returns None
     only if O is empty (never happens for a connected paradoxical game).
@@ -109,13 +119,21 @@ def maxmin_equilibrium(M, tol=1e-7):
     n = len(M)
     fixed = [None] * n  # coords pinned to their leximin value
 
-    def solve(free, minimise_for=None):
-        # maximise t (or, if minimise_for=j, maximise p_j) over
-        #   p_i = fixed[i] (pinned), p_j >= t (free), p >= 0, sum p = 1, A p <= 0
-        # variables: [p_0..p_{n-1}, t]
+    def pins():
+        rows, vals = [np.ones(n)], [1.0]  # sum p = 1
+        for i in range(n):
+            if fixed[i] is not None:
+                row = np.zeros(n)
+                row[i] = 1.0
+                rows.append(row)
+                vals.append(fixed[i])
+        return np.array(rows), np.array(vals)
+
+    def max_min_level(free):
+        # maximise t over { p in O, sum p = 1, pins, p_j >= t for every free j }
         c = np.zeros(n + 1)
-        c[n if minimise_for is None else minimise_for] = -1.0
-        A_ub = [np.hstack([M, np.zeros((n, 1))])]  # A p <= 0
+        c[n] = -1.0
+        A_ub = [np.hstack([M, np.zeros((n, 1))])]
         b_ub = [np.zeros(n)]
         for j in free:  # t - p_j <= 0
             row = np.zeros(n + 1)
@@ -123,41 +141,46 @@ def maxmin_equilibrium(M, tol=1e-7):
             row[n] = 1.0
             A_ub.append(row[None])
             b_ub.append([0.0])
-        eq = [np.append(np.ones(n), 0.0)]  # sum p = 1
-        beq = [1.0]
-        for i in range(n):  # pin already-fixed coords
-            if fixed[i] is not None:
-                row = np.zeros(n + 1)
-                row[i] = 1.0
-                eq.append(row)
-                beq.append(fixed[i])
-        bounds = [(0.0, 1.0)] * n + [(None, None)]
+        a_eq, b_eq = pins()
+        a_eq = np.hstack([a_eq, np.zeros((len(a_eq), 1))])  # no t in the equalities
         return linprog(
             c,
             A_ub=np.vstack(A_ub),
             b_ub=np.concatenate(b_ub),
-            A_eq=np.vstack(eq),
-            b_eq=beq,
-            bounds=bounds,
+            A_eq=a_eq,
+            b_eq=b_eq,
+            bounds=[(0.0, 1.0)] * n + [(None, None)],
             method="highs",
         )
 
+    def max_coord(j, free, floor):
+        # maximise p_j over { p in O, sum p = 1, pins, every OTHER free coord >= floor }
+        c = np.zeros(n)
+        c[j] = -1.0
+        a_eq, b_eq = pins()
+        lo = max(0.0, floor - 1e-9)
+        bounds = [(0.0, 1.0)] * n
+        for k in free:
+            if k != j:
+                bounds[k] = (lo, 1.0)
+        return linprog(c, A_ub=M, b_ub=np.zeros(n), A_eq=a_eq, b_eq=b_eq, bounds=bounds, method="highs")
+
     free = list(range(n))
     while free:
-        r = solve(free)
-        if not r.success:
+        res = max_min_level(free)
+        if not res.success:
             return None
-        t = r.x[n]
-        # a free coord is "stuck" at t iff it cannot exceed t under the current pins
+        t = res.x[n]
+        # pin every free coord that cannot strictly exceed t* with the others at the floor
         newly = []
         for j in list(free):
-            rj = solve([k for k in free if k != j], minimise_for=j)
-            if (not rj.success) or rj.x[j] <= t + tol:
+            r = max_coord(j, free, t)
+            if (not r.success) or (-r.fun) <= t + tol:
                 fixed[j] = t
                 newly.append(j)
-        if not newly:  # numerical safety: pin the achieved minimum
-            j = min(free, key=lambda k: r.x[k])
-            fixed[j] = r.x[j]
+        if not newly:  # numerical safety: pin the achieved minimum coordinate
+            j = min(free, key=lambda k: res.x[k])
+            fixed[j] = res.x[j]
             newly = [j]
         free = [k for k in free if fixed[k] is None]
     p = np.clip(np.array(fixed, dtype=float), 0.0, None)
@@ -236,6 +259,73 @@ def max_entropy_equilibrium(M, tol=1e-8):
         return None
     p = np.clip(res.x, 0.0, None)
     return p / p.sum()
+
+
+def equilibrium_vertices(M, tol=1e-7):
+    """Extreme equilibria (vertices) of the symmetric-Nash polytope
+
+        O = { p in the simplex : M p <= 0 }.
+
+    O is the set of all symmetric Nash equilibria (p is a best response to itself
+    iff (M p)_i <= pᵀM p = 0 for every move i). It is a convex polytope, so the
+    full solution set is the convex hull of these vertices: 1 vertex = a unique
+    equilibrium, 2 = a segment (the cop game), more = a polygon/polytope.
+
+    For these (paradoxical, connected) games every equilibrium lies in ker(M)
+    -- O = {p in Delta : M p = 0} = ker(M) ∩ Delta -- so we enumerate in kernel
+    coordinates: with a kernel basis N (n x d, d = nullity), O = {c : N c >= 0,
+    1ᵀN c = 1}, a polytope with n facets in d-1 dimensions. Each vertex makes
+    d-1 of those facets tight, so we solve the d x d systems for every (d-1)-subset
+    of facets and keep the feasible, distinct points. That is O(C(n, d-1)) tiny
+    solves (d is small) instead of the O(C(2n, n-1)) n-by-n solves of a full facet
+    sweep -- orders of magnitude fewer. (That O = ker(M) ∩ Delta here, rather than
+    the larger {M p <= 0}, is verified across the enumerated games; it can fail for
+    non-paradoxical games with a dominated move, which this family excludes.)
+    """
+    M = np.asarray(M, dtype=float)
+    n = len(M)
+    _, s, vt = np.linalg.svd(M)
+    thresh = tol * max(s[0], 1.0)
+    N = vt[s < thresh].T  # n x d kernel basis
+    d = N.shape[1]
+    if d == 0:
+        return []  # no fully-mixed family (does not occur for these games)
+    ones_n = np.ones(n) @ N  # 1ᵀN, length d
+    verts, seen = [], set()
+    for combo in combinations(range(n), d - 1):
+        sysA = np.vstack([N[list(combo)], ones_n]) if combo else ones_n[None]
+        rhs = np.zeros(d)
+        rhs[-1] = 1.0
+        if abs(np.linalg.det(sysA)) < 1e-12:
+            continue  # chosen facets + normalization not independent
+        p = N @ np.linalg.solve(sysA, rhs)
+        if (p >= -tol).all():
+            p = np.clip(p, 0.0, None)
+            p = p / p.sum()
+            key = tuple(np.round(p, 6))
+            if key not in seen:
+                seen.add(key)
+                verts.append(p)
+    return verts
+
+
+def num_equilibria(M, tol=1e-7):
+    """Number of extreme equilibria (vertices of O). 1 = unique Nash equilibrium."""
+    return len(equilibrium_vertices(M, tol))
+
+
+def equilibrium_dim(M, tol=1e-7):
+    """Dimension of the equilibrium polytope O (0 = a single point / unique).
+
+    Computed from the affine hull of the vertices, so it reflects the WHOLE Nash
+    set -- including any boundary equilibria -- not just the fully-mixed kernel
+    family (whose dimension is kernel_dim - 1, generally a lower bound on this).
+    """
+    V = equilibrium_vertices(M, tol)
+    if len(V) <= 1:
+        return 0
+    P = np.array(V)
+    return int(np.linalg.matrix_rank(P - P[0], tol=1e-6))
 
 
 def equilibrium_info(M, tol=1e-8):

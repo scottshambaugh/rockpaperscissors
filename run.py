@@ -8,9 +8,11 @@ from rpsfair import (
     automorphisms,
     gini,
     grid,
+    is_prime,
     k_paradoxical,
     kernel_dim,
     num_cuts,
+    num_equilibria,
     num_orbits,
     pretty,
     reduce_twins,
@@ -50,8 +52,12 @@ def rank(structures, sort=True):
                 "ties": tie_fraction(M),
                 "cuts": num_cuts(M),  # articulation points (0 = robustly connected)
                 "core": len(reduce_twins(M)[0]),
+                # modular-prime: no nontrivial module (stronger than twin-free)
+                "prime": is_prime(M),
                 # dim of the equilibrium family: 0 = unique point, >=1 = continuum
                 "eqdim": kernel_dim(M) - 1,
+                # number of extreme equilibria (vertices of O): 1 = unique solution
+                "nverts": num_equilibria(M),
             }
         )
     if sort:
@@ -60,18 +66,25 @@ def rank(structures, sort=True):
     return ranked
 
 
-def report_and_plot(kind, n, structures, sort=True, optimize_layout=True, twin_free_only=False):
+def report_and_plot(
+    kind, n, structures, sort=True, optimize_layout=True,
+    twin_free_only=False, prime_only=False, ncols=4, dpi=140,
+):
     """Print ranking + top text grid, save the multi-panel plot.
 
-    twin_free_only: keep only twin-free structures (no tie-twin duplicates) and
-    tag the plot/file as the twin-free set.
+    twin_free_only: keep only twin-free structures (no tie-twin duplicates).
+    prime_only: keep only modular-prime structures (no nontrivial module; stronger
+        than twin-free). Tags the plot/file as the prime set; takes precedence.
+    ncols: panels per row in the saved grid (e.g. 8 for the wide n=6 gardens).
     """
     ranked = rank(structures, sort=sort)
-    if twin_free_only:
+    if prime_only:
+        ranked = [r for r in ranked if r["prime"]]
+    elif twin_free_only:
         ranked = [r for r in ranked if r["core"] == n]
     label = "ranked" if sort else "unranked"
-    suffix = "_twinfree" if twin_free_only else ""
-    descr = "twin-free " if twin_free_only else ""
+    suffix = "_prime" if prime_only else ("_twinfree" if twin_free_only else "")
+    descr = "prime " if prime_only else ("twin-free " if twin_free_only else "")
     n_family = sum(1 for r in ranked if r["eqdim"] > 0)
     n_cut = sum(1 for r in ranked if r["cuts"] > 0)
     print(f"\nn={n} {kind} {descr}({label}): {len(ranked)} structures")
@@ -79,7 +92,11 @@ def report_and_plot(kind, n, structures, sort=True, optimize_layout=True, twin_f
     print(f"    {n_cut} have a cut vertex (articulation point)")
     for i, r in enumerate(ranked, 1):
         core_tag = "twin-free" if r["core"] == n else f"core={r['core']}"
-        eq_tag = "eq=unique" if r["eqdim"] == 0 else f"eq={r['eqdim']}D-family"
+        eq_tag = (
+            "eq=unique"
+            if r["nverts"] == 1
+            else f"eq={r['nverts']} vertices ({r['eqdim']}D)"
+        )
         print(
             f"  #{i:<2d} orbits={r['orbits']} |Aut|={r['aut']} "
             f"gini={r['gini']:.2f} ties={r['ties']:.2f} cuts={r['cuts']} {core_tag} {eq_tag}"
@@ -92,7 +109,7 @@ def report_and_plot(kind, n, structures, sort=True, optimize_layout=True, twin_f
 
     def title(i, r):
         # gini varies only when the equilibrium is non-uniform (inclusive)
-        parts = [f"#{i + 1}", f"orbits={r['orbits']}"]
+        parts = [f"#{i + 1}", f"orbits={r['orbits']}", f"n_eq={r['nverts']}"]
         if PERCENTAGES[kind]:
             parts.append(f"gini={r['gini']:.2f}")
         parts.append(f"ties={r['ties']:.2f}")
@@ -103,11 +120,13 @@ def report_and_plot(kind, n, structures, sort=True, optimize_layout=True, twin_f
     titles = [title(i, r) for i, r in enumerate(ranked)]
     grid(
         [(r["M"], r["xs"]) for r in ranked],
+        ncols=ncols,
         titles=titles,
         suptitle=f"n={n} {kind} {descr}structures, {label}",
         path=path,
         optimize_layout=optimize_layout,
         show_percentages=PERCENTAGES[kind],
+        dpi=dpi,
     )
     print(f"  wrote {path}")
 

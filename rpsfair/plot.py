@@ -227,6 +227,164 @@ def draw(
     ax.axis("off")
 
 
+_MODBOX = {"tie": "#e08214", "order": "#3690c0", "prime": "#999999"}
+
+
+_MOD_R = 0.22  # node radius (matches draw()'s default)
+# inches of panel width per data-unit of view radius; chosen so a node renders at
+# ~draw()'s physical size, keeping the fixed 9pt label legible at any content extent.
+_MOD_IN_PER_UNIT = 1.25
+
+
+def _modular_layout(M, R=_MOD_R, gap=0.30):
+    """Bottom-up modular layout. Returns (pos, boxes, qedges, center, half).
+
+    Each module is laid out in its own local frame and recentered on its content
+    bounding box, so a module's children sit centered within its disk at every level
+    (a big sub-module no longer biases the cluster). `half` is the content half-extent
+    (natural square view is center ± half), exposed so callers can share a scale.
+    """
+    import math
+
+    from .modular import modular_decomposition, named_subgame
+
+    M = np.asarray(M)
+
+    def label_of(node):
+        reps = [min(c["members"]) for c in node["children"]]
+        return named_subgame(M[np.ix_(reps, reps)]) or ""
+
+    def layout(node):
+        # returns (pos, boxes, qedges, radius), all centered on the content bbox
+        if node["type"] == "leaf":
+            return {min(node["members"]): np.zeros(2)}, [], [], R
+        kids = [layout(c) for c in node["children"]]
+        crad = [k[3] for k in kids]
+        reps = [min(c["members"]) for c in node["children"]]
+        k = len(kids)
+        if k == 1:
+            off = [np.zeros(2)]
+        else:
+            ring = max(
+                (crad[i] + crad[(i + 1) % k] + gap) / (2 * math.sin(math.pi / k)) for i in range(k)
+            )
+            angs = np.linspace(math.pi / 2, math.pi / 2 + 2 * math.pi, k, endpoint=False)
+            off = [ring * np.array([math.cos(a), math.sin(a)]) for a in angs]
+        pos, boxes, qedges = {}, [], []
+        for (cpos, cbox, cq, cr), o, child in zip(kids, off, node["children"], strict=False):
+            for idx, p in cpos.items():
+                pos[idx] = p + o
+            boxes += [(bc + o, br, bt, bl) for bc, br, bt, bl in cbox]
+            qedges += [(qa + o, ra, qb + o, rb, sg) for qa, ra, qb, rb, sg in cq]
+            if child["type"] != "leaf":  # draw a disk for each internal child module
+                boxes.append((o, cr, child["type"], label_of(child)))
+        for ia in range(k):
+            for ib in range(ia + 1, k):
+                qedges.append((off[ia], crad[ia], off[ib], crad[ib], int(M[reps[ia], reps[ib]])))
+        # recenter this module's content on its bounding box
+        xe = [c for p in pos.values() for c in (p[0] - R, p[0] + R)] + [
+            c for bc, br, *_ in boxes for c in (bc[0] - br, bc[0] + br)
+        ]
+        ye = [c for p in pos.values() for c in (p[1] - R, p[1] + R)] + [
+            c for bc, br, *_ in boxes for c in (bc[1] - br, bc[1] + br)
+        ]
+        sh = np.array([(min(xe) + max(xe)) / 2, (min(ye) + max(ye)) / 2])
+        pos = {i: p - sh for i, p in pos.items()}
+        boxes = [(bc - sh, br, bt, bl) for bc, br, bt, bl in boxes]
+        qedges = [(qa - sh, ra, qb - sh, rb, sg) for qa, ra, qb, rb, sg in qedges]
+        rad = max(
+            [float(np.hypot(*p)) + R for p in pos.values()]
+            + [float(np.hypot(*bc)) + br for bc, br, *_ in boxes]
+        )
+        return pos, boxes, qedges, rad
+
+    tree = modular_decomposition(M)
+    pos, boxes, qedges, rad = layout(tree)  # root content already centered at origin
+    return pos, boxes, qedges, (0.0, 0.0), rad + 0.12
+
+
+def plot_modular(M, xs=None, ax=None, node_labels=None, title=None, path=None, dpi=140,
+                 view_half=None, view_center=None):
+    """Draw a game with nodes laid out by their modular decomposition.
+
+    Each module is a cluster; nested modules are nested translucent disks colored by
+    quotient type (tie = orange, order = blue, prime = grey) and named by their
+    quotient game, so the substitution structure G = H[M_1,...] is visible. Node fill
+    is the equilibrium play rate (defaults to max-min); node size/font match draw().
+
+    Pass `ax` to compose into a larger figure. Pass `view_half`/`view_center` to force
+    a shared view scale across panels (so nodes render at the same physical size); the
+    natural values come from `_modular_layout`.
+    """
+    from .equilibrium import maxmin_equilibrium
+
+    M = np.asarray(M)
+    n = len(M)
+    if xs is None:
+        xs = maxmin_equilibrium(M)
+    R = _MOD_R
+    pos, boxes, qedges, center, half = _modular_layout(M, R=R)
+    if view_half is None:
+        view_half = half
+    if view_center is None:
+        view_center = center
+
+    own_fig = ax is None
+    if own_fig:
+        # size the figure so the node radius is ~draw()'s physical size at this scale
+        s = max(4.5, 2 * view_half * _MOD_IN_PER_UNIT)
+        fig, ax = plt.subplots(figsize=(s, s))
+
+    for cen, radius, typ, label in sorted(boxes, key=lambda b: -b[1]):  # largest disk first
+        col = _MODBOX.get(typ, "#999999")
+        ax.add_patch(
+            Circle(cen, radius, facecolor=col, alpha=0.15, edgecolor=col, lw=1.6, ls="--", zorder=0.5)
+        )
+        if label:
+            ax.text(
+                cen[0] - 0.71 * radius, cen[1] + 0.71 * radius, label,
+                ha="center", va="center", fontsize=8.5, color=col, fontweight="bold", zorder=0.6,
+            )
+
+    for ca, ra, cb, rb, sign in qedges:  # one edge per sibling-module pair
+        u = cb - ca
+        d = np.hypot(*u)
+        if d < 1e-9:
+            continue
+        u = u / d
+        s0, e0 = ca + u * (ra + 0.05), cb - u * (rb + 0.05)
+        if sign == 0:
+            ax.plot([s0[0], e0[0]], [s0[1], e0[1]], color=TIE, ls="--", lw=1.3, zorder=1, alpha=0.7)
+        else:
+            src, dst = (s0, e0) if sign == 1 else (e0, s0)
+            ax.add_patch(
+                FancyArrowPatch(src, dst, arrowstyle="-|>", mutation_scale=13, color=WIN, lw=1.5, zorder=2)
+            )
+
+    # WTL profile + play rate, rendered exactly as draw() (radius R, font 9, same offsets)
+    profiles = [(int((r == 1).sum()), int((r == 0).sum()) - 1, int((r == -1).sum())) for r in M]
+    for i in range(n):
+        x, y = pos[i]
+        fill = CMAP(NORM(xs[i]))
+        tc = "white" if _luminance(fill) < 0.5 else "black"
+        ax.add_patch(Circle((x, y), R, facecolor=fill, edgecolor="black", lw=1.3, zorder=3))
+        lab = node_labels[i] if node_labels else "{}·{}·{}".format(*profiles[i])
+        ax.text(x, y + 0.05, lab, ha="center", va="center", fontsize=9, fontweight="bold", color=tc, zorder=4)
+        ax.text(x, y - 0.08, f"{xs[i] * 100:.0f}%", ha="center", va="center", fontsize=9, fontweight="bold", color=tc, zorder=4)
+    if title:
+        ax.set_title(title, fontsize=11, pad=6)
+    ax.set_xlim(view_center[0] - view_half, view_center[0] + view_half)
+    ax.set_ylim(view_center[1] - view_half, view_center[1] + view_half)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    if own_fig:
+        if path:
+            plt.savefig(path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        return fig
+    return ax
+
+
 def add_colorbar(fig, ax=None, cax=None, orientation="horizontal", label="equilibrium play rate"):
     """Attach the global play-rate colorbar (0%-50%) to a figure."""
     sm = plt.cm.ScalarMappable(cmap=CMAP, norm=NORM)
@@ -247,20 +405,37 @@ def grid(
     labels=None,
     optimize_layout=True,
     show_percentages=True,
+    row_labels=None,
+    dpi=140,
 ):
     """items: list of (M, xs). Render a grid with a shared colorbar.
 
     labels: optional list of label-lists (one length-n list per item).
         Use None to fall back to WTL profile labels on every node.
+    A None entry in `items` leaves that cell blank -- pad an n-group to a full
+    row to keep multi-n gardens grouped by n.
+    row_labels: optional {row_index: text} -- a bold label in the left margin of
+        that row (e.g. {0: "n=3", 1: "n=4"} to mark each group).
     optimize_layout / show_percentages: forwarded to draw().
     """
     n_items = len(items)
     ncols = min(ncols, max(1, n_items))
     nrows = (n_items + ncols - 1) // ncols
-    fig_h = 3.8 * nrows + 0.4
-    fig, axes = plt.subplots(nrows, ncols, figsize=(3.8 * ncols, fig_h))
+    # Fixed-inch margins so tall grids don't accrue proportional whitespace and
+    # the suptitle never overlaps the top row.
+    PANEL = 3.8
+    top_in = 0.55 if suptitle else 0.12
+    bottom_in = 0.70 if show_percentages else 0.12
+    left_in = 1.05 if row_labels else 0.0
+    fig_w = PANEL * ncols + left_in
+    fig_h = PANEL * nrows + top_in + bottom_in
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h))
     axes = np.atleast_1d(axes).flatten()
-    for i, (M, xs) in enumerate(items):
+    for i, item in enumerate(items):
+        if item is None:
+            axes[i].axis("off")
+            continue
+        M, xs = item
         draw(
             axes[i],
             M,
@@ -272,16 +447,29 @@ def grid(
         )
     for ax in axes[n_items:]:
         ax.axis("off")
+    rect = [left_in / fig_w, bottom_in / fig_h, 1.0, 1.0 - top_in / fig_h]
+    plt.tight_layout(rect=rect)
     if suptitle:
-        fig.suptitle(suptitle, fontsize=12, y=0.99)
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+        fig.suptitle(suptitle, fontsize=14, y=1.0 - 0.18 * top_in / fig_h, va="top")
+    if row_labels:
+        for row, label in row_labels.items():
+            pos = axes[row * ncols].get_position()
+            fig.text(
+                0.5 * left_in / fig_w,
+                (pos.y0 + pos.y1) / 2,
+                label,
+                rotation=0,
+                va="center",
+                ha="center",
+                fontsize=22,
+                fontweight="bold",
+            )
     if show_percentages:
         # Fixed physical colorbar size (inches), independent of grid height
-        bar_h_in, bar_bottom_in, bar_w_in = 0.16, 0.32, 3.0
-        fig_w = 3.8 * ncols
+        bar_h_in, bar_bottom_in, bar_w_in = 0.16, 0.30, 3.0
         cbar_ax = fig.add_axes(
             [
-                0.5 - (bar_w_in / fig_w) / 2,
+                left_in / fig_w + (1 - left_in / fig_w) / 2 - (bar_w_in / fig_w) / 2,
                 bar_bottom_in / fig_h,
                 bar_w_in / fig_w,
                 bar_h_in / fig_h,
@@ -289,6 +477,44 @@ def grid(
         )
         add_colorbar(fig, cax=cbar_ax)
     if path:
-        plt.savefig(path, dpi=140, bbox_inches="tight")
+        plt.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return fig
+
+
+def equilibria_grid(M, path=None, ncols=4, labels=None, optimize_layout=True, dpi=140):
+    """Plot every extreme equilibrium (vertex of O) of game M, plus the max-min point.
+
+    Each panel is the same game graph -- same node layout -- with the nodes filled
+    by that solution's play rates, so the support shift across the vertices (and
+    where the leximin max-min point sits among them) is visible at a glance. The
+    final panel is the canonical max-min equilibrium. The suptitle carries the
+    game's metrics; each panel is titled by that solution's Gini coefficient.
+    """
+    from .equilibrium import equilibrium_vertices, maxmin_equilibrium
+    from .metrics import gini, num_cuts, num_orbits, tie_fraction
+
+    verts = equilibrium_vertices(M)
+    mm = maxmin_equilibrium(M)
+    items = [(M, v) for v in verts] + [(M, mm)]
+    titles = [f"gini={gini(v):.2f}" for v in verts] + [f"max-min  gini={gini(mm):.2f}"]
+    labels_arg = [labels] * len(items) if labels is not None else None
+    parts = [
+        f"n={len(M)}",
+        f"orbits={num_orbits(M)}",
+        f"n_eq={len(verts)}",
+        f"gini={gini(mm):.2f}",
+        f"ties={tie_fraction(M):.2f}",
+        f"cuts={num_cuts(M)}",
+    ]
+    return grid(
+        items,
+        ncols=ncols,
+        titles=titles,
+        labels=labels_arg,
+        suptitle="  ".join(parts),
+        path=path,
+        optimize_layout=optimize_layout,
+        show_percentages=True,
+        dpi=dpi,
+    )

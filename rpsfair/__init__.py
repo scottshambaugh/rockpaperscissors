@@ -4,11 +4,14 @@ from .cache import CACHE_DIR, cached, load, save
 from .display import letter_labels, pretty, show, wtl_labels
 from .equilibrium import (
     equilibrium,
+    equilibrium_dim,
     equilibrium_info,
+    equilibrium_vertices,
     has_fully_mixed,
     kernel_dim,
     max_entropy_equilibrium,
     maxmin_equilibrium,
+    num_equilibria,
 )
 from .metrics import (
     aut_size,
@@ -20,7 +23,15 @@ from .metrics import (
     num_roles,
     tie_fraction,
 )
-from .plot import CMAP, NORM, add_colorbar, best_layout, draw, grid
+from .modular import (
+    is_module,
+    is_prime,
+    modular_decomposition,
+    named_subgame,
+    neq_tree,
+    tree_summary,
+)
+from .plot import CMAP, NORM, add_colorbar, best_layout, draw, equilibria_grid, grid, plot_modular
 from .search import search_balanced, search_balanced_fast, search_inclusive, search_regular
 from .structure import (
     canonical_key,
@@ -50,11 +61,16 @@ __all__ = [
     "canonicalize",
     "connected",
     "draw",
+    "equilibria_grid",
     "equilibrium",
+    "equilibrium_dim",
     "equilibrium_info",
+    "equilibrium_vertices",
     "gini",
     "grid",
     "has_fully_mixed",
+    "is_module",
+    "is_prime",
     "k_paradoxical",
     "kernel_dim",
     "letter_labels",
@@ -62,13 +78,18 @@ __all__ = [
     "matrix_hash",
     "max_entropy_equilibrium",
     "maxmin_equilibrium",
+    "modular_decomposition",
+    "named_subgame",
+    "neq_tree",
     "node_orbits",
     "num_cuts",
+    "num_equilibria",
     "num_orbits",
     "num_roles",
     "orbit_bytes",
     "orbit_hashes",
     "paradoxical",
+    "plot_modular",
     "pretty",
     "profile_of",
     "reduce_twins",
@@ -80,6 +101,7 @@ __all__ = [
     "search_regular",
     "show",
     "tie_fraction",
+    "tree_summary",
     "twin_free",
     "wtl_labels",
 ]
