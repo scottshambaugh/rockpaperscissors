@@ -3,6 +3,8 @@ name = "rockpaperscissors"
 version = "0.1.0"
 description = "Enumerate and visualize fair generalizations of Rock-Paper-Scissors"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     "numpy",
