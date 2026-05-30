@@ -17,6 +17,7 @@ from rpsfair.generate import (
     _has_fully_mixed_batch,
     _paradoxical_batch,
     canonical_key_fast,
+    count_iso_classes,
     generate_tournaments,
     generate_up_to_iso,
     search_balanced_gen,
@@ -44,6 +45,16 @@ def test_generate_count(n):
     assert len(g) == ISO[n]
     # one representative per class: no two generated games are isomorphic
     assert len({canonical_key(M) for M in g}) == ISO[n]
+
+
+def test_count_iso_classes():
+    # closed-form Burnside count matches the known sequence ...
+    known = {1: 1, 2: 2, 3: 7, 4: 42, 5: 582, 6: 21480, 7: 2142288,
+             8: 575016219, 9: 415939243032}
+    assert {n: count_iso_classes(n) for n in known} == known
+    # ... and agrees with direct enumeration where we can enumerate
+    for n in (2, 3, 4, 5):
+        assert count_iso_classes(n) == len(list(generate_up_to_iso(n)))
 
 
 def test_generate_skew_and_zero_diagonal():

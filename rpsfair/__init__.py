@@ -13,7 +13,7 @@ from .equilibrium import (
     maxmin_equilibrium,
     num_equilibria,
 )
-from .generate import search_two_paradox
+from .generate import count_iso_classes, search_two_paradox
 from .metrics import (
     aut_size,
     automorphisms,
@@ -61,6 +61,7 @@ __all__ = [
     "canonical_key",
     "canonicalize",
     "connected",
+    "count_iso_classes",
     "draw",
     "equilibria_grid",
     "equilibrium",

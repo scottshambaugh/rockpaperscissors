@@ -18,17 +18,24 @@ Metrics computed per structure: `orbits` (structurally distinct strategies = aut
 
 ## Counts up to isomorphism
 
-Each fairness cell is `total (twin-free) [prime]` — the total count up to isomorphism, the twin-free subcount in parentheses, and the modular-prime subcount in brackets. The `candidates` column is the raw brute-force search space, `3^(n choose 2)` (one of `{-1, 0, +1}` per upper-triangle edge), before any filtering or isomorphism reduction.
+Each fairness cell is `total (twin-free) [prime]` — the total count up to isomorphism, the twin-free subcount in parentheses, and the modular-prime subcount in brackets. The `candidates` column is the raw brute-force search space, `3^(n choose 2)` (one of `{-1, 0, +1}` per upper-triangle edge), before any filtering. The `iso classes` column collapses that by relabeling: the number of distinct games up to isomorphism (`candidates` modulo the `S_n` action, computed in closed form by Burnside over the cycle types — `count_iso_classes(n)`), which is the real size of the space the fair games sit inside. It matches the enumerated sequence `1, 2, 7, 42, 582, 21480, …` for small `n` and stays comparatively tame (≈ `4.2 × 10¹¹` at `n=9`) where the `candidates` column has already passed `10¹⁷`. It is *not* simply `3^C(n,2) / n!`: that ratio is only the identity-permutation term of the Burnside sum (and isn't even an integer), so it undercounts by the automorphism correction — the true value is slightly larger, by a factor `1.032 / 1.014 / 1.006` at `n = 7 / 8 / 9` (the correction vanishes as games become rigid).
 
-| n | candidates = 3^C(n,2) | two-paradox     | regular            | balanced           | inclusive           |
-|---|-----------------------|-----------------|--------------------|--------------------|---------------------|
-| 3 | 27                    | 0 (0) [0]       | 1 (1) [1]          | 1 (1) [1]          | 1 (1) [1]           |
-| 4 | 729                   | 0 (0) [0]       | 1 (1) [1]          | 1 (1) [1]          | 3 (2) [2]           |
-| 5 | 59,049                | 0 (0) [0]       | 2 (2) [2]          | 4 (3) [3]          | 15 (8) [7]          |
-| 6 | 14,348,907            | 0 (0) [0]       | 5 (4) [4]          | 16 (13) [13]       | 222 (177) [169]     |
-| 7 | 10,460,353,203        | 1 (1) [1]       | 13 (12) [12]       | 175 (152) [152]    | 10525 (9401) [9350] |
-| 8 | 22,876,792,454,961    | 4 (4) [3]       | 82 (76) [76]       | 5274 (4921) [4917] | —                   |
-| 9 | 1,853,020,188,851,841 | 221 (221) [197] | 2016 (1973) [1972] | —                  | —                   |
+| n | candidates = 3^C(n,2)   | iso classes     | two-paradox     | regular            | balanced           | inclusive           |
+|---|-------------------------|-----------------|-----------------|--------------------|--------------------|---------------------|
+| 3 | 27                      | 7               | 0 (0) [0]       | 1 (1) [1]          | 1 (1) [1]          | 1 (1) [1]           |
+| 4 | 729                     | 42              | 0 (0) [0]       | 1 (1) [1]          | 1 (1) [1]          | 3 (2) [2]           |
+| 5 | 59,049                  | 582             | 0 (0) [0]       | 2 (2) [2]          | 4 (3) [3]          | 15 (8) [7]          |
+| 6 | 14,348,907              | 21,480          | 0 (0) [0]       | 5 (4) [4]          | 16 (13) [13]       | 222 (177) [169]     |
+| 7 | 10,460,353,203          | 2,142,288       | 1 (1) [1]       | 13 (12) [12]       | 175 (152) [152]    | 10525 (9401) [9350] |
+| 8 | 22,876,792,454,961      | 575,016,219     | 4 (4) [3]       | 82 (76) [76]       | 5274 (4921) [4917] | —                   |
+| 9 | 150,094,635,296,999,121 | 415,939,243,032 | 221 (221) [197] | 2016 (1973) [1972] | —                  | —                   |
+
+**OEIS cross-references.** Two of these columns are known sequences, which both validates the code and extends the table:
+
+- `iso classes` is **[A001174](https://oeis.org/A001174)** — "oriented graphs (complete digraphs) on `n` unlabeled nodes" — exactly, since a skew `{-1,0,+1}` game *is* an oriented graph (each pair is a tie/non-edge or one of two orientations). A001174 even lists the same Burnside-over-partitions formula `count_iso_classes` uses, and the asymptotic `~ 3^(n(n-1)/2)/n!` quoted above.
+- `balanced` is **[A308239](https://oeis.org/A308239)** — "connected Eulerian oriented graphs" — a definitional identity (zero row sums ⇔ in-degree = out-degree ⇔ Eulerian; connected + Eulerian + `n≥2` forces paradoxical). It is offset 0, so `a(n)` is our `n`-vertex count directly (`a(8)=5274`), which **predicts the un-enumerated `balanced n=9 = 434017`** (and `n=10 = 90658149`).
+- `two-paradox` rests on the tournament count **[A000568](https://oeis.org/A000568)** (`…456, 6880, 191536`), verified in the tests. Its *minimum* matches **[A362137](https://oeis.org/A362137)** `a(2)=7` (smallest 2-paradoxical tournament = Paley `Q₇`) — but that sequence is smallest *sizes*, not counts.
+- `regular`, `inclusive`, and the two-paradox *counts* (`1, 4, 221`) return no OEIS match (exact 5-to-7-term searches) — they appear to be new.
 
 The **fairness ladder** is `regular ⊂ balanced ⊂ inclusive` — strict subsets, each a stronger fairness condition. All games we enumerate are P₁ (every strategy has a beater — the `paradoxical()` baseline) and decisively connected. **Two-paradox is a separate axis, not a rung on that ladder**: it strengthens the *paradox* condition (P₁ → P₂), not the fairness condition, and is contained in none of the fairness tiers (see below).
 

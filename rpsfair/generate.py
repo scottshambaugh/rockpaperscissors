@@ -203,6 +203,63 @@ def generate_up_to_iso(n, prune=None):
                 yield Z
 
 
+def count_iso_classes(n):
+    """Number of isomorphism classes of n-node skew {-1,0,+1} games (closed form).
+
+    Burnside count of `3^C(n,2)` labelings modulo the S_n relabeling action: for a
+    permutation sigma the number of fixed games is `3^g`, where g is the number of
+    sigma-orbits on unordered pairs that carry a consistent orientation. An orbit
+    that maps some edge to its own reverse is forced to a tie (factor 1, not 3); a
+    signed union-find over ordered pairs detects exactly those. Summing over cycle
+    types (weighted by class size) is instant for any n -- far past where
+    `generate_up_to_iso` can enumerate. Matches 1, 2, 7, 42, 582, 21480 for n <= 6;
+    gives 2_142_288 / 575_016_219 / 415_939_243_032 at n = 7 / 8 / 9.
+    """
+    from collections import Counter
+    from math import factorial
+
+    def partitions(m, hi):
+        if m == 0:
+            yield ()
+            return
+        for k in range(min(m, hi), 0, -1):
+            for rest in partitions(m - k, k):
+                yield (k, *rest)
+
+    def consistent_orbits(part):
+        sigma, base = [], 0
+        for length in part:  # representative permutation with these cycle lengths
+            sigma += [base + (i + 1) % length for i in range(length)]
+            base += length
+        visited, good = set(), 0
+        for i in range(n):
+            for j in range(n):
+                if i == j or (i, j) in visited:
+                    continue
+                local = {(i, j): 1}
+                visited.add((i, j))
+                stack, ok = [((i, j), 1)], True
+                while stack:
+                    (a, b), s = stack.pop()
+                    for (c, d), ns in (((b, a), -s), ((sigma[a], sigma[b]), s)):
+                        if (c, d) in local:
+                            ok = ok and local[(c, d)] == ns
+                        else:
+                            local[(c, d)] = ns
+                            visited.add((c, d))
+                            stack.append(((c, d), ns))
+                good += ok
+        return good
+
+    total = 0
+    for part in partitions(n, n):
+        denom = 1
+        for k, mult in Counter(part).items():
+            denom *= (k**mult) * factorial(mult)
+        total += (factorial(n) // denom) * 3 ** consistent_orbits(part)
+    return total // factorial(n)
+
+
 def generate_tournaments(n):
     """Yield one matrix per isomorphism class of n-node tournaments.
 
