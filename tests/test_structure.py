@@ -2,13 +2,16 @@
 
 import numpy as np
 import pytest
-from toy import BRICK, COP, DOMINATED, ELEM, PALEY7, RPS, RPSLS, game, ring
+from toy import BRICK, COP, DOMINATED, ELEM, PALEY7, PRIME_NEQ11, RPS, RPSLS, game, ring
 
 from rpsfair import (
+    aut_size,
     canonical_key,
     canonicalize,
     connected,
+    is_prime,
     matrix_hash,
+    num_equilibria,
     orbit_bytes,
     orbit_hashes,
     paradoxical,
@@ -16,6 +19,7 @@ from rpsfair import (
     regular,
     twin_free,
 )
+from rpsfair.structure import paradoxical_batch
 
 
 @pytest.mark.parametrize(
@@ -32,6 +36,26 @@ from rpsfair import (
 )
 def test_paradoxical(M, expected):
     assert paradoxical(M) is expected
+
+
+def test_paradoxical_batch_matches_scalar():
+    # the batched mask agrees with the per-matrix predicate, including non-paradoxical
+    games = [RPS, RPSLS, COP, PALEY7, ring(6), DOMINATED, np.zeros((4, 4), np.int8)]
+    Zs = np.stack([np.pad(M, (0, 7 - len(M))) for M in games])  # pad to common n=7
+    scalar = np.array([paradoxical(M) for M in [Zs[i] for i in range(len(games))]])
+    assert (paradoxical_batch(Zs) == scalar).all()
+
+
+def test_prime_neq11_breaks_n_bound():
+    # Regression: a prime, rigid, regular n=9 game with 11 extreme equilibria --
+    # the first counterexample to `prime => n_eq <= n` (n_eq = 11 > 9).
+    M = PRIME_NEQ11
+    assert np.array_equal(M, -M.T) and (np.diag(M) == 0).all()  # skew, zero diagonal
+    assert regular(M) and connected(M) and paradoxical(M)
+    assert is_prime(M)  # modular-prime: no nontrivial module
+    assert twin_free(M)
+    assert aut_size(M) == 1  # rigid
+    assert num_equilibria(M) == 11 > len(M)
 
 
 def test_paradoxical_needs_win_and_loss():

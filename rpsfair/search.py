@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from .cache import cached
 from .equilibrium import has_fully_mixed, maxmin_equilibrium
-from .structure import connected, matrix_hash, orbit_hashes
+from .structure import connected, matrix_hash, orbit_hashes, paradoxical_batch
 
 BATCH_SIZE = 8192
 
@@ -39,12 +39,6 @@ def _build_batch(vals, edge_i, edge_j, n):
     M[:, edge_i, edge_j] = vals
     M[:, edge_j, edge_i] = -vals
     return M
-
-
-def _paradoxical_batch(M_batch):
-    has_w = (M_batch == 1).any(axis=2).all(axis=1)
-    has_l = (M_batch == -1).any(axis=2).all(axis=1)
-    return has_w & has_l
 
 
 def _enumerate(n, kind, predicate, batch_filter=None):
@@ -80,7 +74,7 @@ def _enumerate(n, kind, predicate, batch_filter=None):
             vals = _vals_batch(batch_start, batch_end, v0, n_edges)
             M_batch = _build_batch(vals, edge_i, edge_j, n)
 
-            mask = _paradoxical_batch(M_batch)
+            mask = paradoxical_batch(M_batch)
             if batch_filter is not None:
                 mask &= batch_filter(M_batch)
             surv_paradox += int(mask.sum())
@@ -129,79 +123,130 @@ def search_balanced(n):
 
 
 def search_regular(n):
-    """Enumerate regular structures (every node has identical W, T, L).
+    """Regular structures (every node has identical W, T, L), up to isomorphism.
 
-    Each row is forced to have exactly W ones, T zeros, L=W minus-ones —
-    a much stronger per-row constraint than balanced's row-sum-zero. We
-    iterate over valid W and recurse row-by-row with arithmetic pruning,
-    so most balanced-but-non-regular matrices are never built.
-
-    Symmetry break: node 0's row is pinned to the single canonical pattern
-    (+1 * W, 0 * T, -1 * W) instead of all its multiset permutations. Every
-    isomorphism class has a labeling with node 0 sorted this way (just permute
-    the other nodes), so this is exact, and it slashes the leaf count by ~n²
-    (n=8: 2.56M -> 14k leaves). Remaining duplicates are removed by the
-    orbit-bytes dedup at the leaf.
+    Row-by-row with the exact per-row (W, T, L) constraint and a node-0 canonical
+    pin, deduplicated by the nauty canonical key (bounded memory, scales past the
+    orbit-hash dedup that OOMed at n=9). Thin wrapper over `search_regular_stream`.
     """
+    return search_regular_stream(n)
+
+
+def _msperm(p, q, z):
+    """Distinct arrangements of p ones, q minus-ones, z zeros."""
+    return set(permutations((1,) * p + (-1,) * q + (0,) * z))
+
+
+def _stream_search(n, cache_name, desc, runs):
+    """Generic streaming row-by-row enumeration with canonical-key dedup.
+
+    Builds M one row at a time; each `expand(row, M)` in `runs` yields the
+    candidate fill arrays for M[row, row+1:] (or None to prune the branch).
+    A single canonical key per iso class is stored instead of the full orbit,
+    so memory stays bounded and it scales past where the orbit-hash dedup OOMs.
+    Multiple `runs` (e.g. one per win-count W) feed a shared dedup set.
+    """
+    from .generate import canonical_key_fast
 
     def go():
-        results = []
-        seen = set()
-        uniform = np.ones(n) / n
-        leaves = 0
-        new_iso = 0
-        new_connected = 0
         M = np.zeros((n, n), dtype=np.int8)
+        uniform = np.ones(n) / n
+        seen = set()
+        results = []
+        leaves = new_iso = new_connected = 0
         t0 = time.perf_counter()
+        pbar = tqdm(desc=f"{desc} n={n}", unit="leaf", leave=False)
 
-        def msperm(p, q, z):
-            return set(permutations((1,) * p + (-1,) * q + (0,) * z))
-
-        def rec(row, W):
+        def rec(row, expand):
             nonlocal leaves, new_iso, new_connected
             if row == n:
                 leaves += 1
-                h = matrix_hash(M)
-                if h in seen:
+                pbar.update(1)
+                key = canonical_key_fast(M)
+                if key in seen:
                     return
+                seen.add(key)
                 new_iso += 1
-                seen.update(orbit_hashes(M))
                 if connected(M):
                     new_connected += 1
+                    pbar.set_postfix_str(f"{new_connected} kept")
                     results.append((M.copy(), uniform))
                 return
-            forced = M[row, :row]
-            fp = int((forced == 1).sum())
-            fn_ = int((forced == -1).sum())
-            rp = W - fp
-            rn = W - fn_
-            free = n - 1 - row
-            rz = free - rp - rn
-            if rp < 0 or rn < 0 or rz < 0:
+            arrs = expand(row, M)
+            if arrs is None:
                 return
-            # pin node 0 to its canonical sorted pattern (exact, see docstring)
-            row0_pat = (tuple([1] * rp + [0] * rz + [-1] * rn),)
-            arrs = row0_pat if row == 0 else msperm(rp, rn, rz)
             for arr in arrs:
                 for j, v in enumerate(arr):
                     col = row + 1 + j
                     M[row, col] = v
                     M[col, row] = -v
-                rec(row + 1, W)
+                rec(row + 1, expand)
 
-        # Valid (W, T, L) with W=L>=1 (paradoxical) and W+T+L = n-1
-        for W in range(1, (n - 1) // 2 + 1):
+        for expand in runs:
             M[:] = 0
-            rec(0, W)
-
-        dt = time.perf_counter() - t0
+            rec(0, expand)
+        pbar.close()
         print(
-            f"  regular n={n}: {leaves} leaves -> "
-            f"{new_iso} new iso -> {new_connected} connected   ({dt:.2f}s)"
+            f"  {desc}_stream n={n}: {leaves} leaves -> {new_iso} iso -> "
+            f"{new_connected} connected   ({time.perf_counter() - t0:.1f}s)"
         )
         return results
 
-    return cached(f"regular_n{n}", go)
+    return cached(cache_name, go)
+
+
+def search_balanced_stream(n):
+    """Streaming balanced search: row-by-row build with the zero-row-sum
+    constraint, dedup by one canonical key per class instead of storing every
+    orbit. Memory stays bounded, so it scales past n=7 where the orbit-hash
+    dedup OOMs.
+    """
+
+    def expand(row, M):
+        forced = M[row, :row]
+        fp = int((forced == 1).sum())
+        fn_ = int((forced == -1).sum())
+        target = -int(forced.sum())
+        free = n - 1 - row
+        if abs(target) > free:
+            return None
+        arrs = []
+        for p in range(free + 1):
+            q = p - target
+            if q < 0 or p + q > free:
+                continue
+            if fp + p == 0 or fn_ + q == 0:  # node would never win / never lose
+                continue
+            arrs.extend(_msperm(p, q, free - p - q))
+        return arrs
+
+    return _stream_search(n, f"balanced_n{n}", "balanced", [expand])
+
+
+def search_regular_stream(n):
+    """Streaming regular search: row-by-row with the exact per-row (W, T, L)
+    constraint and a node-0 canonical pin, one run per win-count W, dedup by
+    canonical key so it stays in bounded memory past n=8.
+    """
+
+    def make_expand(W):
+        def expand(row, M):
+            forced = M[row, :row]
+            fp = int((forced == 1).sum())
+            fn_ = int((forced == -1).sum())
+            rp = W - fp
+            rn = W - fn_
+            rz = (n - 1 - row) - rp - rn
+            if rp < 0 or rn < 0 or rz < 0:
+                return None
+            if row == 0:  # pin node 0 to break the within-W relabeling symmetry
+                return [tuple([1] * rp + [0] * rz + [-1] * rn)]
+            return _msperm(rp, rn, rz)
+
+        return expand
+
+    runs = [make_expand(W) for W in range(1, (n - 1) // 2 + 1)]
+    return _stream_search(n, f"regular_n{n}", "regular", runs)
 
 
 def search_inclusive(n):
@@ -226,62 +271,9 @@ def search_inclusive(n):
 
 
 def search_balanced_fast(n):
-    """Row-by-row pruned enumeration of balanced structures. Good to n=7."""
+    """Row-by-row pruned enumeration of balanced structures.
 
-    def go():
-        M = np.zeros((n, n), dtype=np.int8)
-        uniform = np.ones(n) / n
-        seen = set()
-        results = []
-        # Tracking
-        leaves = 0
-        new_iso = 0
-        new_connected = 0
-        t0 = time.perf_counter()
-
-        def msperm(p, q, z):
-            return set(permutations((1,) * p + (-1,) * q + (0,) * z))
-
-        def rec(row):
-            nonlocal leaves, new_iso, new_connected
-            if row == n:
-                leaves += 1
-                h = matrix_hash(M)
-                if h in seen:
-                    return
-                new_iso += 1
-                seen.update(orbit_hashes(M))
-                if connected(M):
-                    new_connected += 1
-                    results.append((M.copy(), uniform))
-                return
-            forced = M[row, :row]
-            fp = int((forced == 1).sum())
-            fn_ = int((forced == -1).sum())
-            target = -int(forced.sum())
-            free = n - 1 - row
-            if abs(target) > free:
-                return
-            for p in range(free + 1):
-                q = p - target
-                if q < 0 or p + q > free:
-                    continue
-                if fp + p == 0 or fn_ + q == 0:
-                    continue
-                z = free - p - q
-                for arr in msperm(p, q, z):
-                    for j, v in enumerate(arr):
-                        col = row + 1 + j
-                        M[row, col] = v
-                        M[col, row] = -v
-                    rec(row + 1)
-
-        rec(0)
-        dt = time.perf_counter() - t0
-        print(
-            f"  balanced_fast n={n}: {leaves} leaves -> "
-            f"{new_iso} new iso -> {new_connected} connected   ({dt:.2f}s)"
-        )
-        return results
-
-    return cached(f"balanced_n{n}", go)
+    Thin wrapper over `search_balanced_stream` (canonical-key dedup, bounded
+    memory) -- the older orbit-hash dedup OOMed at n=8.
+    """
+    return search_balanced_stream(n)

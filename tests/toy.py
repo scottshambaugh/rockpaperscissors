@@ -49,3 +49,21 @@ PALEY7 = game(7, [(i, (i + d) % 7) for i in range(7) for d in (1, 2, 4)])
 # RPS plus a strictly dominated 4th move (loses to all) -> NOT paradoxical,
 # no fully-mixed equilibrium; unique boundary equilibrium drops the 4th move.
 DOMINATED = game(4, [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)])
+
+# A prime, rigid (|Aut|=1) *regular* n=9 game (profile (3,2,3)) with 11 extreme
+# equilibria -- the first counterexample to `prime => n_eq <= n`. Found by the
+# regular n=9 enumeration; hard-coded here so the regression test is self-contained.
+PRIME_NEQ11 = np.array(
+    [
+        [0, 1, 1, 1, 0, 0, -1, -1, -1],
+        [-1, 0, 0, -1, 1, 0, 1, 1, -1],
+        [-1, 0, 0, 1, 1, 1, -1, 0, -1],
+        [-1, 1, -1, 0, -1, 1, 0, 1, 0],
+        [0, -1, -1, 1, 0, 1, -1, 0, 1],
+        [0, 0, -1, -1, -1, 0, 1, 1, 1],
+        [1, -1, 1, 0, 1, -1, 0, -1, 0],
+        [1, -1, 0, -1, 0, -1, 1, 0, 1],
+        [1, 1, 1, 0, -1, -1, 0, -1, 0],
+    ],
+    dtype=np.int8,
+)

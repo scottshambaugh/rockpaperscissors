@@ -26,6 +26,11 @@ def paradoxical(M):
     return bool((M == 1).any(axis=1).all() and (M == -1).any(axis=1).all())
 
 
+def paradoxical_batch(Zs):
+    """Bool mask over a (B, n, n) stack: each node has at least one win and loss."""
+    return (Zs == 1).any(axis=2).all(axis=1) & (Zs == -1).any(axis=2).all(axis=1)
+
+
 def regular(M):
     """Every node has the same (W, T, L) profile. Strictly stronger than balanced."""
     W = (M == 1).sum(axis=1)
