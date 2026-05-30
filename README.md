@@ -1,5 +1,7 @@
 # Fair generalizations of Rock-Paper-Scissors
 
+## See *[The Secret Garden of Rock-Paper-Scissors](https://theshamblog.com/the-secret-garden-of-rock-paper-scissors/)* for context, details, and results
+
 Enumerate and visualize "fair" generalizations of Rock-Paper-Scissors on `n` strategies, represented as `n×n` skew-symmetric matrices with entries in `{-1, 0, +1}`. Three nested notions of fairness:
 
 - **Regular** — every node has the **same** `(W, T, L)` profile. Strongest.
