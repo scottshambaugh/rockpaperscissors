@@ -14,23 +14,23 @@ Metrics computed per structure: `orbits` (structurally distinct strategies = aut
 
 Each fairness cell is `total (twin-free) [prime]` — the total count up to isomorphism, the twin-free subcount in parentheses, and the modular-prime subcount in brackets. The `candidates` column is the raw brute-force search space, `3^(n choose 2)` (one of `{-1, 0, +1}` per upper-triangle edge), before any filtering or isomorphism reduction.
 
-| n | candidates = 3^C(n,2) | two-paradox  | regular        | balanced         | inclusive         |
-|---|-----------------------|--------------|----------------|------------------|-------------------|
-| 3 | 27                    | 0 (0) [0]    | 1 (1) [1]      | 1 (1) [1]        | 1 (1) [1]         |
-| 4 | 729                   | 0 (0) [0]    | 1 (1) [1]      | 1 (1) [1]        | 3 (2) [2]         |
-| 5 | 59,049                | 0 (0) [0]    | 2 (2) [2]      | 4 (3) [3]        | 15 (8) [7]        |
-| 6 | 14,348,907            | 0 (0) [0]    | 5 (4) [4]      | 16 (13) [13]     | 222 (177) [169]   |
-| 7 | 10,460,353,203        | 1 (1) [1]    | 13 (12) [12]   | 175 (152) [152]  | 10525 (9401) [9350] |
-| 8 | 22,876,792,454,961    | 0 (0) [0]    | 82 (76) [76]   | 5274 (4921) [4917] | —               |
-| 9 | 1,853,020,188,851,841  | 5 (5) [4]    | 2016 (1973) [1972] | —            | —               |
+| n | candidates = 3^C(n,2) | two-paradox     | regular            | balanced           | inclusive           |
+|---|-----------------------|-----------------|--------------------|--------------------|---------------------|
+| 3 | 27                    | 0 (0) [0]       | 1 (1) [1]          | 1 (1) [1]          | 1 (1) [1]           |
+| 4 | 729                   | 0 (0) [0]       | 1 (1) [1]          | 1 (1) [1]          | 3 (2) [2]           |
+| 5 | 59,049                | 0 (0) [0]       | 2 (2) [2]          | 4 (3) [3]          | 15 (8) [7]          |
+| 6 | 14,348,907            | 0 (0) [0]       | 5 (4) [4]          | 16 (13) [13]       | 222 (177) [169]     |
+| 7 | 10,460,353,203        | 1 (1) [1]       | 13 (12) [12]       | 175 (152) [152]    | 10525 (9401) [9350] |
+| 8 | 22,876,792,454,961    | 4 (4) [3]       | 82 (76) [76]       | 5274 (4921) [4917] | —                   |
+| 9 | 1,853,020,188,851,841 | 221 (221) [197] | 2016 (1973) [1972] | —                  | —                   |
 
-Nesting (left to right, strict subsets): `two-paradox ⊂ regular ⊂ balanced ⊂ inclusive`. All games we enumerate are P₁ (every strategy has a beater — that's the `paradoxical()` baseline filter); the smallest *P₂* (two-paradox) appears at `n=7` (the Paley tournament `Q₇`).
+The **fairness ladder** is `regular ⊂ balanced ⊂ inclusive` — strict subsets, each a stronger fairness condition. All games we enumerate are P₁ (every strategy has a beater — the `paradoxical()` baseline) and decisively connected. **Two-paradox is a separate axis, not a rung on that ladder**: it strengthens the *paradox* condition (P₁ → P₂), not the fairness condition, and is contained in none of the fairness tiers (see below).
 
-- **`two-paradox`** = `P₂`: every *pair* of strategies has a common strict beater — a third strategy that beats both (ties don't count). Currently computed as a post-filter on `search_regular`; for larger `n` we could push the constraint into the row-by-row enumeration.
+- **`two-paradox`** = `P₂`: every *pair* of strategies has a common strict beater — a third strategy that beats both (ties don't count; `k_paradoxical(M, 2)`). A tie offers no beater, so a P₂ game is necessarily a **tie-free tournament**. The count is therefore an authoritative filter over *all* tournament classes — `search_two_paradox` enumerates every tournament up to iso via canonical augmentation (`generate_tournaments`; the leaf counts are A000568 = …456, 6880, 191536 at `n=7,8,9`) and keeps the P₂, paradoxical, connected ones — **not** a post-filter on a fairness tier. That distinction is the whole point: because P₂ is orthogonal to regular/balanced/inclusive, post-filtering a fairness tier *undercounts*. At `n=8` all 4 two-paradox games are non-regular, non-balanced, *and* non-inclusive (no fully-mixed equilibrium) — no fairness tier contains a single one of them — so the old `search_regular` post-filter reported `0` instead of `4` (no even-`n` tournament is regular: 7 games can't split into equal wins and losses), and `5` instead of `221` at `n=9` (it caught only the *regular* P₂ tournaments). The smallest P₂ game is the Paley tournament `Q₇` (`n=7`, the classical Erdős–Schütte minimum). Tournaments have no tie-twins, so the twin-free subcount always equals the total; the prime subcount can be strictly smaller (e.g. at `n=9`, 197 of the 221 are modular-prime).
 - **twin-free**: no two nodes are tie-twins. Two nodes are *twins* if they tie and share the same parents and children (equivalently, identical rows in `M`); merging a twin pair gives an `(n-1)`-node game, so a structure with twins is just a smaller game with a duplicated strategy. The twin-free subcount is the "genuinely new at this `n`" sequence — e.g. Brick+Boulder+Paper+Scissors reduces to RPS, and the 5-element Water/Fire/Clay/Sand/Grass game reduces to the 4-strategy Cop/K-9/Perp/Witness game.
 - **prime** (`[…]`): *modular-prime* — no nontrivial **module**. A module is a set of moves that every outside move relates to identically (beats all, loses to all, or ties all); a twin pair is just a size-2 all-tie module. A non-prime game is a smaller **quotient** game with sub-games substituted into its moves (`G = H[M₁,…,M_k]`), so prime games are the genuine irreducible atoms — a strictly stronger notion than twin-free (`prime ⊆ twin-free`). The gap first appears at `n=5` inclusive: 8 twin-free but only 7 prime, the one extra being RPS with a move blown up into another RPS — twin-free (no duplicated rows) yet decomposable. The number of extreme equilibria factorizes over the decomposition tree (`num_equilibria` ↔ `neq_tree`), which is why the `n_eq` blow-up is a property of *reducible* games: `twin-free ⟹ n_eq ≤ n` is **false** (e.g. `RPSLS[cop×5]` is twin-free with `n_eq = 2⁵ = 32 > 20`). The refined `prime ⟹ n_eq ≤ n` survives through `n=8`, but it is **also false**: the first counterexample appears at `n=9` — a *prime*, rigid (`|Aut|=1`, zero nontrivial modules) regular game with profile `(3,2,3)` and `n_eq = 11 > 9`. So the `n_eq ≤ n` bound is not implied by primeness either; the inflation just needs a rich enough indecomposable game, which first occurs at `n=9`.
 
-Brute force (`search_inclusive`, `search_balanced`) enumerates all `3^C(n,2)` labelings, so it stops at `n=6`. Beyond that we use **isomorph-free generation** (`rpsfair/generate.py`): canonical augmentation (add one node at a time, keep only the canonically-distinguished extension) with a nauty-style refine-and-individualize canonical form, so each isomorphism class is built exactly once with bounded memory. The inclusive `n=7` count above (`10525 (9401) [9350]`) was computed this way — `search_inclusive_gen` augments the 21 480 six-node classes and keeps the paradoxical, connected, fully-mixed ones. Constraint-feasibility pruning gives `search_balanced_gen` / `search_regular_gen` (and the streaming `*_stream` row-by-row variants) for the balanced/regular tiers at higher `n`.
+Brute force (`search_inclusive`, `search_balanced`) enumerates all `3^C(n,2)` labelings, so it stops at `n=6`. Beyond that we use **isomorph-free generation** (`rpsfair/generate.py`): canonical augmentation (add one node at a time, keep only the canonically-distinguished extension) with a nauty-style refine-and-individualize canonical form, so each isomorphism class is built exactly once with bounded memory. The inclusive `n=7` count above (`10525 (9401) [9350]`) was computed this way — `search_inclusive_gen` augments the 21 480 six-node classes and keeps the paradoxical, connected, fully-mixed ones. Constraint-feasibility pruning gives `search_balanced_gen` (canonical augmentation, keeping only balance-feasible partial games) for the balanced tier at higher `n`. The regular tier instead uses the streaming row-by-row `search_regular_stream` (the augmentation overshoot-prune is too loose to be worthwhile for regularity, whereas the exact per-row `(W, T, L)` constraint prunes hard); `search_two_paradox` enumerates tournaments the same canonical-augmentation way.
 
 ## Number of equilibria
 
@@ -128,7 +128,9 @@ rpsfair/
   cache.py        JSON disk cache
   structure.py    paradoxical / connected / regular / canonical_key / orbit_bytes
   equilibrium.py  equilibrium, has_fully_mixed (SVD null-space + LP)
-  search.py       search_regular / search_balanced / search_balanced_fast / search_inclusive
+  search.py       brute + streaming searches: search_{regular,balanced,inclusive}, *_stream
+  generate.py     isomorph-free generation: generate_up_to_iso / generate_tournaments,
+                  nauty canonical key, search_{inclusive,balanced}_gen, search_two_paradox
   metrics.py      num_orbits, aut_size, num_cuts, gini, tie_fraction
   plot.py         draw, grid, best_layout, add_colorbar (matplotlib)
   display.py      pretty, show, wtl_labels, letter_labels (text)

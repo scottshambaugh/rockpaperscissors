@@ -5,6 +5,9 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    # The full suite includes the slow cold-cache enumerations (n=6/n=8), ~5-6 min;
+    # cap the job so a runaway enumeration can't hang CI.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +24,10 @@ jobs:
       - name: Install dependencies (uv provisions Python 3.14)
         run: uv sync
 
-      # `slow` tests are the large cold-cache enumerations (e.g. inclusive n=6);
-      # skip them in CI. Drop the `-m` flag to run the full suite.
+      - name: Lint
+        run: uv run ruff check .
+
+      # Full suite, including the `slow` large-enumeration validations (e.g.
+      # inclusive n=6, two-paradox n=8). Use `-m "not slow"` for a quick subset.
       - name: Run tests
-        run: uv run pytest -q -m "not slow"
+        run: uv run pytest -q --durations=10

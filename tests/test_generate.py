@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from toy import COP, PALEY7, RPS, RPSLS, ring
 
-from rpsfair import automorphisms, canonical_key, connected, paradoxical
+from rpsfair import automorphisms, canonical_key, connected, k_paradoxical, paradoxical
 from rpsfair.equilibrium import has_fully_mixed
 from rpsfair.generate import (
     _canon_and_autos,
@@ -17,10 +17,11 @@ from rpsfair.generate import (
     _has_fully_mixed_batch,
     _paradoxical_batch,
     canonical_key_fast,
+    generate_tournaments,
     generate_up_to_iso,
     search_balanced_gen,
     search_inclusive_gen,
-    search_regular_gen,
+    search_two_paradox,
 )
 from rpsfair.search import search_balanced_stream, search_regular_stream
 
@@ -125,23 +126,42 @@ def test_search_balanced_gen(n, want, no_cache):
     assert all((M.sum(1) == 0).all() and paradoxical(M) and connected(M) for M, _ in g)
 
 
-@pytest.mark.parametrize("n,want", [(5, 2), (6, 5)])
-def test_search_regular_gen(n, want, no_cache):
-    from rpsfair.structure import profile_of
-
-    g = search_regular_gen(n)
-    assert len(g) == want
-    assert all(len(set(profile_of(M))) == 1 and connected(M) for M, _ in g)  # all profiles equal
-
-
 @pytest.mark.parametrize("n,want", [(5, 4), (6, 16)])
 def test_search_balanced_stream(n, want, no_cache):
     assert len(search_balanced_stream(n)) == want
 
 
-@pytest.mark.parametrize("n,want", [(6, 5), (7, 13)])
+@pytest.mark.parametrize("n,want", [(5, 2), (6, 5), (7, 13)])
 def test_search_regular_stream(n, want, no_cache):
-    assert len(search_regular_stream(n)) == want
+    from rpsfair.structure import profile_of
+
+    g = search_regular_stream(n)
+    assert len(g) == want
+    assert all(len(set(profile_of(M))) == 1 and connected(M) for M, _ in g)  # all profiles equal
+
+
+# ---------------- tournament generation + two-paradox census ----------------
+# A000568: number of tournaments on n nodes up to isomorphism.
+A000568 = {2: 1, 3: 2, 4: 4, 5: 12, 6: 56, 7: 456}
+
+
+@pytest.mark.parametrize("n", [2, 3, 4, 5, 6, 7])
+def test_generate_tournaments_count(n):
+    g = list(generate_tournaments(n))
+    assert len(g) == A000568[n]
+    assert all((np.diag(M) == 0).all() and (M[~np.eye(n, dtype=bool)] != 0).all() for M in g)
+    assert len({canonical_key(M) for M in g}) == A000568[n]  # one rep per class
+
+
+@pytest.mark.parametrize("n,want", [(5, 0), (6, 0), (7, 1)])
+def test_search_two_paradox(n, want, no_cache):
+    g = search_two_paradox(n)
+    assert len(g) == want
+    # every result is a tie-free, two-paradox, paradoxical, connected game
+    assert all(
+        k_paradoxical(M, 2) and paradoxical(M) and connected(M) and (M[M == 0].size == len(M))
+        for M, _ in g
+    )
 
 
 # ---------------- slow: larger validations ----------------
@@ -157,5 +177,14 @@ def test_generate_count_n6():
 
 
 @pytest.mark.slow
-def test_search_regular_gen_n8(no_cache):
-    assert len(search_regular_gen(8)) == 82
+def test_search_regular_stream_n8(no_cache):
+    # cold-cache regular count at n=8 via the production streaming search
+    assert len(search_regular_stream(8)) == 82
+
+
+@pytest.mark.slow
+def test_search_two_paradox_n8(no_cache):
+    # authoritative two-paradox count at n=8 is 4 -- NOT the 0 from the old
+    # `search_regular` post-filter (no even-n tournament is regular). This also
+    # exercises generate_tournaments(8) (the 6880 A000568 classes) end to end.
+    assert len(search_two_paradox(8)) == 4

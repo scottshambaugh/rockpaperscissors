@@ -9,7 +9,6 @@ from rpsfair import (
     gini,
     grid,
     is_prime,
-    k_paradoxical,
     kernel_dim,
     num_cuts,
     num_equilibria,
@@ -19,6 +18,7 @@ from rpsfair import (
     search_balanced,
     search_inclusive,
     search_regular,
+    search_two_paradox,
     tie_fraction,
     twin_free,
 )
@@ -153,7 +153,7 @@ def main():
         reg = search_regular(n)
         bal = search_balanced(n)
         inc = search_inclusive(n)
-        p2 = [M for M, _ in reg if k_paradoxical(M, 2)]
+        p2 = search_two_paradox(n)  # authoritative: a filter over all tournaments
 
         def cell(structs):
             n_tf = sum(twin_free(M) for M, _ in structs)
@@ -161,7 +161,7 @@ def main():
 
         dt = time.perf_counter() - t0
         print(
-            f"{n:1d}   {cell(p2 and [(M, None) for M in p2]):>11}   "
+            f"{n:1d}   {cell(p2):>11}   "
             f"{cell(reg):>10}   {cell(bal):>10}   {cell(inc):>12}   ({dt:.2f}s)"
         )
 

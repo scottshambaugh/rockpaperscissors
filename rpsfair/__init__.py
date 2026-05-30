@@ -13,6 +13,7 @@ from .equilibrium import (
     maxmin_equilibrium,
     num_equilibria,
 )
+from .generate import search_two_paradox
 from .metrics import (
     aut_size,
     automorphisms,
@@ -99,6 +100,7 @@ __all__ = [
     "search_balanced_fast",
     "search_inclusive",
     "search_regular",
+    "search_two_paradox",
     "show",
     "tie_fraction",
     "tree_summary",

@@ -147,11 +147,11 @@ def _orbit_label(n, autos):
     return [find(i) for i in range(n)]
 
 
-def _aug_orbit_reps(autos, n1):
-    """One augmentation vector per Aut(Y)-orbit of {-1,0,+1}^(n1)."""
+def _aug_orbit_reps(autos, n1, values=(-1, 0, 1)):
+    """One augmentation vector per Aut(Y)-orbit of values^(n1)."""
     alist = [a.tolist() for a in autos]
     seen, reps = set(), []
-    for tup in product((-1, 0, 1), repeat=n1):
+    for tup in product(values, repeat=n1):
         v = np.array(tup, dtype=np.int8)
         key = min(tuple(int(x) for x in v[a]) for a in alist)
         if key not in seen:
@@ -203,6 +203,26 @@ def generate_up_to_iso(n, prune=None):
                 yield Z
 
 
+def generate_tournaments(n):
+    """Yield one matrix per isomorphism class of n-node tournaments.
+
+    Same canonical augmentation as `generate_up_to_iso`, but the new node's
+    edges are all decisive ({-1,+1}, no ties), so the leaf count is the number
+    of tournaments up to iso (A000568: ... 456, 6880, 191536 at n=7, 8, 9).
+    Tie-freeness is closed under removing the canonical node, so the generation
+    stays isomorph-free.
+    """
+    if n <= 1:
+        yield np.zeros((1, 1), dtype=np.int8)
+        return
+    for Y in generate_tournaments(n - 1):
+        _, autos = _canon_and_autos(Y)
+        for v in _aug_orbit_reps(autos, n - 1, values=(-1, 1)):
+            Z = _augment(Y, v)
+            if _accept(Z):
+                yield Z
+
+
 def search_balanced_gen(n):
     """Balanced games via isomorph-free canonical augmentation.
 
@@ -230,44 +250,6 @@ def search_balanced_gen(n):
         return out
 
     return cached(f"balanced_n{n}", go)
-
-
-def search_regular_gen(n):
-    """Regular games via isomorph-free canonical augmentation.
-
-    Every node ends with the same (W, T, L) profile (W = L >= 1 for paradoxical,
-    W + T + L = n-1). For a fixed target W we grow only *profile-feasible* classes:
-    no node may overshoot the target (w_i <= W, t_i <= T, l_i <= W). Since a node's
-    counts only drop when a node is deleted, this is closed under canonical parent;
-    and because the counts must sum to n-1 at the leaf, "no overshoot" there forces
-    the exact profile -- the leaves are exactly the regular classes for that W.
-    Looping W gives all of them (distinct profiles, so no cross-W duplicates).
-    """
-    from .cache import cached
-    from .structure import connected
-
-    def go():
-        uniform = np.ones(n) / n
-        out = []
-        bar = tqdm(desc=f"regular n={n}", unit="cls", leave=False)
-        for W in range(1, (n - 1) // 2 + 1):
-            T = n - 1 - 2 * W
-
-            def prune(Z, k, W=W, T=T):
-                w = (Z == 1).sum(axis=1)
-                t = (Z == 0).sum(axis=1) - 1
-                lo = (Z == -1).sum(axis=1)
-                return bool((w <= W).all() and (t <= T).all() and (lo <= W).all())
-
-            for M in generate_up_to_iso(n, prune):  # leaves are regular for this W
-                if connected(M):
-                    out.append((M.copy(), uniform))
-                    bar.update(1)
-                    bar.set_postfix_str(f"{len(out)} kept")
-        bar.close()
-        return out
-
-    return cached(f"regular_n{n}", go)
 
 
 from .structure import paradoxical_batch as _paradoxical_batch  # noqa: E402
@@ -356,3 +338,39 @@ def search_inclusive_gen(n):
         return out
 
     return cached(f"inclusive_n{n}", go)
+
+
+# A000568: number of tournaments on n nodes up to iso -- the progress total for
+# the two-paradox census, which streams every tournament class exactly once.
+_TOURNAMENT_COUNTS = {1: 1, 2: 1, 3: 2, 4: 4, 5: 12, 6: 56, 7: 456, 8: 6880, 9: 191536}
+
+
+def search_two_paradox(n):
+    """Two-paradox (P2 / Erdos-Schutte) games at size n, up to isomorphism.
+
+    P2 -- every *pair* of strategies has a common strict beater -- forces a
+    tie-free tournament (a tie offers no beater), so the authoritative count is
+    a filter over *all* tournament classes, enumerated once each by canonical
+    augmentation (`generate_tournaments`). Crucially this is NOT a refinement of
+    the regular/balanced/inclusive fairness ladder: the n=8 two-paradox games
+    are none of those (no even-n tournament is regular or balanced, and they
+    lack a fully-mixed equilibrium), so post-filtering a fairness tier
+    undercounts -- e.g. filtering `search_regular` reports 0 at n=8 and 5 at
+    n=9 versus the true 4 and 221. Returns [(M, maxmin_equilibrium)].
+    """
+    from .cache import cached
+    from .equilibrium import maxmin_equilibrium
+    from .structure import connected, k_paradoxical, paradoxical
+
+    def go():
+        out = []
+        bar = tqdm(generate_tournaments(n), total=_TOURNAMENT_COUNTS.get(n),
+                   desc=f"two-paradox n={n}", unit="cls", leave=False)
+        for M in bar:
+            if k_paradoxical(M, 2) and paradoxical(M) and connected(M):
+                out.append((M.copy(), maxmin_equilibrium(M)))
+                bar.set_postfix_str(f"{len(out)} found")
+        bar.close()
+        return out
+
+    return cached(f"two_paradox_n{n}", go)
