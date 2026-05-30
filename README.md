@@ -1,6 +1,10 @@
-# Fair generalizations of Rock-Paper-Scissors
-
 ## See *[The Secret Garden of Rock-Paper-Scissors](https://theshamblog.com/the-secret-garden-of-rock-paper-scissors/)* for context, details, and results
+
+This repo was pretty much entirely vibe coded useing Claude Code. I understood and could verify the initial implementation on low n, but was hands off for the optimizations that were necessary for searching higher n, beyond verifying that the algorithms still reproduced the values we already found. All this to say, take the results here with a grain of salt and I think it would be an interesting exercise to implement this yourself and figure out optimizations for faster game searches.
+
+----
+
+# Fair generalizations of Rock-Paper-Scissors
 
 Enumerate and visualize "fair" generalizations of Rock-Paper-Scissors on `n` strategies, represented as `n×n` skew-symmetric matrices with entries in `{-1, 0, +1}`. Three nested notions of fairness:
 
