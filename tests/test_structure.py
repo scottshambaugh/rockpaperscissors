@@ -12,7 +12,6 @@ from rpsfair import (
     is_prime,
     matrix_hash,
     num_equilibria,
-    orbit_bytes,
     orbit_hashes,
     paradoxical,
     profile_of,
@@ -134,13 +133,6 @@ def test_canonical_key_relabel_invariant(M):
 def test_canonical_key_distinguishes_nonisomorphic():
     assert canonical_key(COP) != canonical_key(BRICK)  # same profiles, different games
     assert canonical_key(RPS) != canonical_key(ring(4))
-
-
-def test_orbit_bytes_contains_self_and_relabels():
-    orbit = orbit_bytes(COP)
-    assert COP.tobytes() in orbit
-    perm = [3, 1, 0, 2]
-    assert _relabel(COP, perm).tobytes() in orbit
 
 
 def test_matrix_hash_orbit_hashes_consistency():

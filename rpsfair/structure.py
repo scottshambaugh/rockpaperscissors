@@ -4,8 +4,21 @@ import hashlib
 from itertools import permutations
 
 import numpy as np
+import pynauty
 
 _PERMS_CACHE = {}
+
+
+def pynauty_graph(M):
+    """A skew {-1,0,+1} game as a pynauty directed graph: arc i->j iff i beats j.
+
+    Ties are non-edges, so each game is an oriented graph and nauty's
+    directed-graph isomorphism/automorphism machinery applies directly.
+    """
+    M = np.asarray(M)
+    n = len(M)
+    adj = {i: np.flatnonzero(M[i] == 1).tolist() for i in range(n)}
+    return pynauty.Graph(n, directed=True, adjacency_dict=adj)
 
 
 def _perms(n):
@@ -111,32 +124,12 @@ def connected(M):
 
 
 def canonical_key(M):
-    """Canonical hashable key of M under node relabeling.
+    """Canonical hashable key of M under node relabeling (nauty certificate).
 
-    Builds the lex-smallest flattened M[p][:, p] over all permutations p.
-    Used for stable identification; for hot dedup loops prefer `orbit_bytes`.
+    Two games get the same key iff they are isomorphic. Computed by nauty
+    (via pynauty) on the directed-graph view of M -- exact and fast.
     """
-    n = len(M)
-    perms = _perms(n)
-    ii = perms[:, :, None]
-    jj = perms[:, None, :]
-    flat = M[ii, jj].reshape(len(perms), -1)
-    return tuple(flat[np.lexsort(flat.T[::-1])][0].tolist())
-
-
-def orbit_bytes(M):
-    """Bytes-rep of every node-relabeling of M.
-
-    Returns a set of `bytes` containing one entry per distinct orbit member
-    (up to n! entries). Membership-test in this set is O(1), so the entire
-    iso class can be detected by checking `M.tobytes() in seen` without
-    re-running canonical_key per candidate.
-    """
-    perms = _perms(len(M))
-    ii = perms[:, :, None]
-    jj = perms[:, None, :]
-    orbit = np.ascontiguousarray(M[ii, jj])
-    return {o.tobytes() for o in orbit}
+    return pynauty.certificate(pynauty_graph(M))
 
 
 _HASH_BYTES = 12  # 96-bit digest -> collisions negligible even at ~1e9 entries
@@ -156,9 +149,9 @@ def matrix_hash(M):
 def orbit_hashes(M):
     """Set of integer hashes (see `matrix_hash`), one per node-relabeling of M.
 
-    Replaces `orbit_bytes` for memory-bounded dedup at large n: a leaf is a
+    Memory-bounded dedup for the brute `_enumerate` search: a leaf is a
     duplicate iff `matrix_hash(leaf) in seen`, and `seen` only ever holds
-    compact ints rather than full n*n matrices (or their byte strings).
+    compact ints rather than full n*n matrices.
     """
     perms = _perms(len(M))
     ii = perms[:, :, None]

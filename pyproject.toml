@@ -12,6 +12,7 @@ dependencies = [
     "networkx",
     "matplotlib",
     "tqdm",
+    "pynauty",
     "mplcairo>=0.6.1",
 ]
 

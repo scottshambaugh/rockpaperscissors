@@ -13,119 +13,39 @@ monotone under adding a node.
 from itertools import product
 
 import numpy as np
+import pynauty
 from tqdm import tqdm
+
+from .structure import pynauty_graph
 
 # Number of isomorphism classes of n-node skew {-1,0,+1} games (so the inclusive
 # generator can show a real progress total + ETA when augmenting the (n-1) classes).
 _ISO_COUNTS = {1: 1, 2: 2, 3: 7, 4: 42, 5: 582, 6: 21480}
 
 
-def _normalize(seq):
-    rank = {v: r for r, v in enumerate(sorted(set(seq)))}
-    return [rank[s] for s in seq]
-
-
-def _refine(M, col):
-    """Equitable color refinement from an initial coloring (1-WL, respecting col).
-
-    A vertex's new color is its old color plus the sorted multiset of (relation,
-    neighbor color); since the old color is the first key, colors only ever split,
-    never merge -- the result is the coarsest equitable refinement of `col`.
-    """
-    n = len(M)
-    col = list(col)
-    while True:
-        sig = [
-            (col[i], tuple(sorted((int(M[i, j]), col[j]) for j in range(n) if j != i)))
-            for i in range(n)
-        ]
-        new = _normalize(sig)
-        if new == col:
-            return col
-        col = new
-
-
-def _wl_colors(M):
-    """Coarsest equitable coloring, seeded by the WTL profile (wins/ties/losses)."""
-    n = len(M)
-    seed = _normalize(
-        [(int((M[i] == 1).sum()), int((M[i] == 0).sum()) - 1, int((M[i] == -1).sum())) for i in range(n)]
-    )
-    return _refine(M, seed)
-
-
-def _nauty_search(M):
-    """Refine-and-individualize search (nauty-style).
-
-    Refine to an equitable coloring; while a non-singleton color class remains,
-    branch by individualizing each of its vertices (split it off, re-refine) and
-    recurse. Each leaf is a discrete coloring = a labeling. Returns
-    (canonical_key, orderings) where canonical_key is the lex-min flattened matrix
-    over the leaves and `orderings` are *all* leaf labelings achieving it (one per
-    automorphism). Visits ~|Aut| labelings rather than the full n!, so it is fast
-    even for highly symmetric (e.g. regular) games where plain refinement collapses
-    the whole graph into one color class.
-    """
-    M = np.asarray(M)
-    n = len(M)
-    best = [None]
-    orderings = []
-
-    def rec(col):
-        col = _refine(M, col)
-        cells = {}
-        for i, c in enumerate(col):
-            cells.setdefault(c, []).append(i)
-        target = next((c for c in sorted(cells) if len(cells[c]) > 1), None)
-        if target is None:  # discrete -> a labeling (position i -> vertex order[i])
-            order = sorted(range(n), key=lambda i: col[i])
-            flat = tuple(int(x) for x in M[np.ix_(order, order)].reshape(-1))
-            if best[0] is None or flat < best[0]:
-                best[0] = flat
-                orderings.clear()
-                orderings.append(order)
-            elif flat == best[0]:
-                orderings.append(order)
-            return
-        for v in cells[target]:  # individualize each vertex of the target cell
-            rec(_normalize([(col[i], 0 if i == v else 1) for i in range(n)]))
-
-    rec(_wl_colors(M))
-    return best[0], orderings
-
-
-def canonical_key_nauty(M):
-    """Canonical key (lex-min flattened matrix) via refine-and-individualize."""
-    return _nauty_search(M)[0]
-
-
 def canonical_key_fast(M):
-    """Iso-invariant canonical key (refine-and-individualize); see canonical_key_nauty.
-
-    Different value than structure.canonical_key (all-n! lex-min) but still equal
-    iff isomorphic, so it deduplicates correctly with one key per class (bounded
-    memory) and stays fast even for symmetric games -- unlike the orbit-hash dedup
-    that OOMs, or plain within-class permutation that hits n! on regular games.
+    """Iso-invariant canonical key via nauty -- equal iff isomorphic, so it
+    deduplicates with one key per class in bounded memory. Same value as
+    structure.canonical_key (both nauty); kept as a separate name for the
+    streaming searches that dedup with it.
     """
-    return canonical_key_nauty(M)
+    return pynauty.certificate(pynauty_graph(M))
 
 
 def _canon_and_autos(M):
-    """(canonical-labeling perm, automorphism perms) via refine-and-individualize.
+    """(canonical-labeling perm, automorphism perms) via nauty.
 
-    The canonical labeling is any leaf achieving the canonical key; the full
-    automorphism group is recovered from *all* such leaves: if labelings o and o0
-    both yield the canonical matrix then a = o o0^{-1} (a[o0[i]] = o[i]) fixes M.
-    Fast even on symmetric games, unlike the n! within-class sweep.
+    `pynauty.canon_label` gives the canonical order (position p -> vertex
+    `cperm[p]`, matching the old refine-and-individualize convention), and the
+    automorphism group is nauty's generating set expanded to the full group.
     """
+    from .metrics import _expand_group
+
     n = len(M)
-    _, orderings = _nauty_search(M)
-    o0 = orderings[0]
-    cperm = np.array(o0, dtype=np.int64)
-    autos = np.empty((len(orderings), n), dtype=np.int64)
-    for k, o in enumerate(orderings):
-        for i in range(n):
-            autos[k, o0[i]] = o[i]
+    g = pynauty_graph(M)
+    cperm = np.array(pynauty.canon_label(g), dtype=np.int64)
+    gens = pynauty.autgrp(g)[0]
+    autos = np.array(_expand_group(gens, n), dtype=np.int64)
     return cperm, autos
 
 

@@ -1,51 +1,52 @@
-# Converting the hand-rolled iso machinery to nauty
+# The iso machinery runs on nauty
 
-`rpsfair` reimplements, by hand, several things nauty does natively and faster.
-Each skew `{-1,0,+1}` game `M` *is* an oriented graph (arc `i→j` iff `M[i,j]==1`;
-ties are non-edges), so nauty's **directed-graph** mode applies directly.
-
-**Validated representation** (matches our code exactly — `|Aut|` and canonical
-certificate agree on RPS/RPSLS/COP/Paley₇/ring₆ and all 582 n=5 classes):
+The package's isomorphism/automorphism machinery is **done** in nauty (via the
+`pynauty` C extension) rather than hand-rolled. Each skew `{-1,0,+1}` game `M` *is*
+an oriented graph (arc `i→j` iff `M[i,j]==1`; ties are non-edges), so nauty's
+**directed-graph** mode applies directly. The representation (`structure.pynauty_graph`):
 
 ```python
 import pynauty
-def to_pynauty(M):
+def pynauty_graph(M):
     n = len(M)
     adj = {i: [j for j in range(n) if M[i, j] == 1] for i in range(n)}
     return pynauty.Graph(n, directed=True, adjacency_dict=adj)
-# canonical key:        pynauty.certificate(to_pynauty(M))
-# automorphism group:   pynauty.autgrp(to_pynauty(M))  -> (gens, grpsize, ...)
+# canonical key:        pynauty.certificate(g)
+# automorphism group:   pynauty.autgrp(g)  -> (gens, grpsize1, grpsize2, orbits, numorbits)
+# canonical labeling:   pynauty.canon_label(g)
 ```
 
-## What converts
+## What was converted (now nauty)
 
-| our function (file) | does | nauty equivalent |
-|---|---|---|
-| `canonical_key` (structure.py) | brute `n!` canonical form | `pynauty.certificate` (in-process) / `dreadnaut` `d`+canon |
-| `canonical_key_fast`, `_nauty_search`, `_canon_and_autos`, `_refine`, `_wl_colors` (generate.py) | our refine+individualize canonical form / autos | `pynauty.certificate` + `pynauty.autgrp` |
-| `automorphisms`, `aut_size` (metrics.py) | automorphism group / its size | `pynauty.autgrp` (returns generators + group size) |
-| `num_orbits`, `node_orbits` (metrics.py) | vertex orbits under Aut | `pynauty.autgrp` returns orbits directly |
-| `orbit_bytes`, `orbit_hashes` (structure.py) | relabeling-orbit dedup keys | subsumed by `certificate` |
-| `generate_tournaments` (generate.py) | iso-free tournaments | `nauty-gentourng` (already used in `nauty/`) |
-| `generate_up_to_iso` (generate.py) | iso-free oriented graphs | `nauty-geng \| nauty-directg -o` (already used for inclusive) |
-| `rust/s2_count.rs`, `rust/regular_count.rs` Aut code | refine+individualize | could call nauty, but self-contained on purpose |
+| function (file) | now uses |
+|---|---|
+| `canonical_key` (structure.py) | `pynauty.certificate` |
+| `canonical_key_fast`, `_canon_and_autos` (generate.py) | `pynauty.certificate` / `pynauty.canon_label` + `autgrp` |
+| `automorphisms`, `aut_size` (metrics.py) | `pynauty.autgrp` (generators expanded; exact group order) |
+| `num_orbits`, `node_orbits` (metrics.py) | `pynauty.autgrp` orbits |
+| `generate_up_to_iso`, `generate_tournaments` (generate.py) | canonical augmentation keyed on nauty canon/autos |
 
-## What does NOT convert (keep as-is)
+Validated: `|Aut|` and canonical certificate match a brute n! oracle on
+RPS/RPSLS/COP/Paley₇/ring₆ and all 582 n=5 classes; every enumeration count
+(ISO, search, generation through n=6/n=8) is unchanged — and faster (n=6
+generation ~17 s vs ~40–65 s before). Removed as dead/redundant: the refine-and-
+individualize helpers (`_refine`, `_wl_colors`, `_normalize`, `_nauty_search`,
+`canonical_key_nauty`) and the superseded `orbit_bytes`.
 
-- `modular.py` (`is_module`, `modular_decomposition`, `named_subgame`, `neq_tree`) — modular
-  decomposition is a different algorithm, not an isomorphism/automorphism task.
-- The brute `canonical_key` is worth keeping as the *tested reference oracle* even if
-  the hot path moves to pynauty.
+## What stays hand-rolled (on purpose)
 
-## Dependency note
+- `modular.py` (modular decomposition) — a different algorithm, not iso/automorphism.
+- `structure.orbit_hashes` / `matrix_hash` — the cheap per-candidate dedup for the
+  brute `_enumerate` (one hash/candidate beats one certificate/candidate over the
+  millions of n≤6 labelings).
+- `rust/s2_count.rs`, `rust/regular_count.rs` — self-contained Rust (their refine+
+  individualize Aut code is local by design, validated against `search_regular`).
 
-`pynauty` (pip) is a C extension wrapping nauty; it would add a build dependency
-(and CI would need it). The CLI tools (`dreadnaut`, `geng`, `gentourng`,
-`directg`, `watercluster2`) need no Python dependency but cost a process spawn per
-call — fine for batch/offline work (the `nauty/` scripts), not per-game in a loop.
-Recommendation: keep the pure-Python `rpsfair` self-contained (no hard nauty dep)
-for the tested n≤9 results; use nauty (CLI in `nauty/`, pynauty optionally) for the
-high-n pushes, exactly as we already do.
+## Dependency
+
+`pynauty` is now a hard dependency (in `pyproject.toml` / `uv.lock`); it bundles and
+builds nauty. The CLI tools (`gentourng`, `geng`, `directg`, `watercluster2`) are
+still used directly by the `nauty/` and `rust/` high-n scripts.
 
 ## Docs
 

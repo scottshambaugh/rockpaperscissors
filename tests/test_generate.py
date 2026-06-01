@@ -92,27 +92,44 @@ def test_canonical_key_fast_distinguishes_classes():
     assert len({canonical_key_fast(M) for M in g}) == len(g)
 
 
+def _brute_autos(M):
+    """Brute n! automorphism group, as a set of tuples -- independent oracle."""
+    from itertools import permutations
+
+    n = len(M)
+    return {tuple(p) for p in permutations(range(n)) if np.array_equal(M[np.ix_(p, p)], M)}
+
+
 @pytest.mark.parametrize(
     "M", [RPS, RPSLS, COP, PALEY7, ring(6), np.zeros((4, 4), np.int8), np.zeros((1, 1), np.int8)]
 )
 def test_canon_autos_match_brute(M):
-    _, autos = _canon_and_autos(M)
-    nauty = {tuple(int(x) for x in a) for a in autos}
-    assert nauty == {tuple(p) for p in automorphisms(M)}
+    brute = _brute_autos(M)
+    _, autos = _canon_and_autos(M)  # nauty (generate)
+    assert {tuple(int(x) for x in a) for a in autos} == brute
+    assert {tuple(p) for p in automorphisms(M)} == brute  # nauty (metrics)
 
 
 def test_canon_autos_match_brute_all_n5():
     for M in generate_up_to_iso(5):
+        brute = _brute_autos(M)
         _, autos = _canon_and_autos(M)
-        assert {tuple(int(x) for x in a) for a in autos} == {tuple(p) for p in automorphisms(M)}
+        assert {tuple(int(x) for x in a) for a in autos} == brute
+        assert {tuple(p) for p in automorphisms(M)} == brute
 
 
 def test_canon_perm_yields_canonical_matrix():
-    # M relabeled by the canonical perm equals the canonical-key matrix
+    # relabeling M by its canonical perm gives a relabel-invariant canonical
+    # matrix: every relabeling of M canonicalizes to the same thing
+    rng = np.random.default_rng(0)
     for M in list(generate_up_to_iso(4))[:20]:
         cperm, _ = _canon_and_autos(M)
-        relabeled = tuple(int(x) for x in M[np.ix_(cperm, cperm)].reshape(-1))
-        assert relabeled == canonical_key_fast(M)
+        canon = M[np.ix_(cperm, cperm)]
+        for _ in range(5):
+            p = rng.permutation(len(M))
+            Mp = M[np.ix_(p, p)]
+            cp, _ = _canon_and_autos(Mp)
+            assert np.array_equal(Mp[np.ix_(cp, cp)], canon)
 
 
 # ---------------- batched filters match the scalar versions ----------------
