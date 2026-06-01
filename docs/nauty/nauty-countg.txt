@@ -1,0 +1,115 @@
+NAUTY-COUNTG(1)                  Nauty Manual                  NAUTY-COUNTG(1)
+
+
+
+NAME
+       nauty-countg - count graphs according to a variety of properties
+
+SYNOPSIS
+       [pickg|countg]  [-fp#:#q  -V  -X]  [--keys]  [-constraints  -v]  [ifile
+       [ofile]]
+
+DESCRIPTION
+              countg : Count graphs according to their properties.
+
+              pickg : Select graphs according to their properties.
+
+              ifile, ofile : Input and output files.
+
+              '-' and missing names imply stdin and stdout.
+
+              Miscellaneous switches:
+
+       -p# -p#:#
+              Specify range of input lines (first is 1) May fail if  input  is
+              incremental.
+
+       -f     With  -p,  assume  input lines of fixed length (only used with a
+              file in graph6/digraph6 format)
+
+       -v     Negate all constraints (but not -p)
+
+       -X     Reverse selection (but -p still observed)
+
+       -V     List properties of every input matching constraints.
+
+       -l     Put a blank line whenever the first parameter changes, if  there
+              are at least two parameters.
+
+       -1     Write  output  as lines of numbers separated by spaces, with 0/1
+              for boolean and both endpoints of ranges given  separately  even
+              if  they  are  the  same,  and the count at the end of the line.
+              Also, no total is written.
+
+       -2     The same as -1 but counts are not written.
+
+       -q     Suppress informative output.
+
+              Constraints:
+
+              Numerical constraints (shown here with following #) can  take  a
+              single  integer value, or a range like #:#, #:, or :#.  Each can
+              also be preceded by  '~',  which  negates  it.    (For  example,
+              -~D2:4 will match any maximum degree which is _not_ 2, 3, or 4.)
+              Constraints are applied to all  input  graphs,  and  only  those
+              which match all constraints are counted or selected.
+
+       -n#    number of vertices           -e#  number of edges
+
+       -L#    number of loops              -C   strongly connected
+
+       -d#    minimum (out-)degree         -D#  maximum (out-)degree
+
+       -m#    vertices of min (out-)degree -M#  vertices of max (out-)degree
+
+       -u#    minimum (in-)degree          -U#  maximum (in-)degree
+
+       -s#    vertices of min (in-)degree  -S#  vertices of max (in-)degree
+
+       -r     regular                      -b   bipartite
+
+       -z#    radius                       -Z#  diameter
+
+       -g#    girth (0=acyclic)            -Y#  total number of cycles
+
+       -h#    maximum independent set      -k#  maximum clique
+
+       -T#    number of triangles          -K#  number of maximal cliques
+
+       -B#    smallest  possible  first  side of a bipartition (0 if nonbipar-
+              tite)
+
+       -H#    number of induced cycles
+
+       -E     Eulerian (all degrees are even, connectivity not required)
+
+       -a#    group size  -o# orbits  -F# fixed points  -t vertex-transitive
+
+       -c#    connectivity (only implemented for 0,1,2).
+
+       -i#    min common nbrs of adjacent vertices;     -I# maximum
+
+       -j#    min common nbrs of non-adjacent vertices; -J# maximum
+
+              Sort keys:
+
+       Counts are made for all graphs passing the constraints.
+              Counts
+
+              are given separately for each combination  of  values  occurring
+              for  the  properties  listed as sort keys.  A sort key is intro-
+              duced by '--' and uses one of the letters known as  constraints.
+              These  can  be  combined:  --n --e  --r  is the same as --ne --r
+              and --ner.  The order of sort keys is significant.
+
+              The sort key ':' has a special purpose: the values of sort  keys
+              following  ':'  are given as ranges rather than creating a sepa-
+              rate line for each value.  For  example  --e:zZ  will  give  the
+              ranges  of  radius  and  diameter  that occur for each number of
+              edges.  The output format matches the input, except that sparse6
+              is  used to output an incremental graph whose predecessor is not
+              output.
+
+
+
+nauty 2.7.3                     September 2021                 NAUTY-COUNTG(1)

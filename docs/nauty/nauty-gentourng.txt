@@ -1,0 +1,44 @@
+NAUTY-GENTOURNG(1)               Nauty Manual               NAUTY-GENTOURNG(1)
+
+
+
+NAME
+       nauty-gentourng - generate small tournaments
+
+SYNOPSIS
+       gentourng [-cd#D#] [-ugsz] [-lq] n [res/mod] [file]
+
+DESCRIPTION
+              Generate all tournaments of a specified class.
+
+       n      : the number of vertices
+
+              res/mod : only generate subset res out of subsets 0..mod-1
+
+       -c     : only write strongly-connected tournaments
+
+       -d#    : a lower bound for the minimum out-degree
+
+       -D#    : a upper bound for the maximum out-degree
+
+       -l     : canonically label output graphs
+
+       -u     : do not output any graphs, just generate and count them
+
+       -g     : use graph6 output (lower triangle)
+
+       -s     : use sparse6 output (lower triangle)
+
+       -z     : use digraph6 output
+
+       -h     : write a header (only with -g or -s)
+
+              Default output is upper triangle row-by-row in ascii
+
+       -q     : suppress auxiliary output
+
+              See program text for much more information.
+
+
+
+nauty 2.7.3                     September 2021              NAUTY-GENTOURNG(1)

@@ -1,0 +1,22 @@
+NAUTY-CONVERSEG(1)               Nauty Manual               NAUTY-CONVERSEG(1)
+
+
+
+NAME
+       nauty-converseg - converse digraphs
+
+SYNOPSIS
+       converseg [-q] [infile [outfile]]
+
+DESCRIPTION
+              Take the converse digraphs of a file of directed graphs.
+
+              The output file has a header if and only if the input file does.
+              Undirected graphs are passed through without change,  while  di-
+              rected graphs are written in digraph6 format.
+
+       -q     Suppress auxiliary information.
+
+
+
+nauty 2.7.3                     September 2021              NAUTY-CONVERSEG(1)

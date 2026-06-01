@@ -1,0 +1,84 @@
+NAUTY-WATERCLUSTER2(1)           Nauty Manual           NAUTY-WATERCLUSTER2(1)
+
+
+
+NAME
+       nauty-watercluster2 - (faster alternative to directg)
+
+SYNOPSIS
+       watercluster2 [ix] [oy] [S] [T] [B] [Z] [C] [m]
+
+DESCRIPTION
+              Reads  graphs  in g6 code or multicode (optional) from stdin and
+              directs them
+
+              ix: the indegree of every vertex may be at most x.
+
+              The default maximum indegree is unlimited.
+
+              oy: the outdegree of every vertex may be at most y.
+
+              The default maximum outdegree is unlimited.
+
+              S : allow that for every pair of vertices x,y at most one of the
+              edges x-->y
+
+              and y-->x may be present. By default both of them may be present
+              in the same graph.
+
+              T : Output directed graphs in T-code. This  is  a  simple  ASCII
+              output format.
+
+              Every  line  contains  one  graph. First the number of vertices,
+              then the number of directed edges and then the list of  directed
+              edges  with  the start first and the end then. E.g.: 3 2 0 1 2 1
+              means 3 vertices, 2 directed edges: 0-->1 and 2-->1
+
+              B : Output the directed graphs in a binary code. Every  item  of
+              the code is an
+
+              unsigned  char. The first unsigned char is the number nv of ver-
+              tices. The vertices are numbered 1..nv. Then the  list  of  ver-
+              tices  x  for  which  there is a directed edge 1->x follow. This
+              list is ended by a 0. Then the list of outgoing neighbours of  2
+              follows -- again ended with a 0, etc.  The code is complete with
+              the 0 ending the list of outgoing neighbours of nv.
+
+              Z : Output the directed graphs in digraph6 code. See formats.txt
+              for a
+
+              complete definition.
+
+              C  :  Do really construct all the directed graphs in memory, but
+              don't output
+
+              them. This is not a big difference in case of restricted in- and
+              outdegrees, because all that is done extra is that edges are di-
+              rected instead of just keeping track  of  in-  and  out-degrees.
+              This  option  is intended only for testing purposes to test also
+              routines that are normally not used when counting.  Things  that
+              would speed up the counting also in some cases of restricted in-
+              and out-degrees -- like multiplying the possibilities of assign-
+              ing directions to edges that can be assigned directions indepen-
+              dent of each other (depending on the degrees of the  endvertices
+              and  overlaps)  -- are not included.  In case of not restrictive
+              bounds on the in- and out-degree it not really constructing  the
+              graphs  can  be  considerably faster. In cases of restricted in-
+              and out-degrees the only difference is that the graph isn't mod-
+              ified.  The fact that in case of no output the graph is not mod-
+              ified is mainly to save time for the one case of  waterclusters,
+              where  large  numbers were determined. If large numbers (without
+              output) for other cases shall be determined,  one  should  think
+              about adding the multiplication routines.
+
+              m : read multicode instead of g6 code
+
+       This  program  uses  different  labelling  routines -- all based on the
+       ideas of
+
+       G.  Brinkmann,   Generating   water   clusters   and   other   directed
+       graphs,mJournal of Mathematical Chemistry 46, 1112--1121 (2009)
+
+
+
+nauty 2.7.3                     September 2021          NAUTY-WATERCLUSTER2(1)

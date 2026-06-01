@@ -1,0 +1,25 @@
+DREADNAUT(1)                     Nauty Manual                     DREADNAUT(1)
+
+
+
+NAME
+       dreadnaut - command line interface to nauty graph isomorphism library
+
+SYNOPSIS
+       dreadnaut [-o options]
+
+DESCRIPTION
+              Enter nauty+traces test program.
+
+       -o options  - set initial options.
+              The parameter value is a string of
+
+              dreadnaut      commands      from     the     following     set:
+              a,c,d,m,p,l,G,P,w,y,$,A,V,M The effect is the same as  if  these
+              commands are entered at the beginning of the standard input.
+
+              For help within dreadnaut, use the h command.
+
+
+
+nauty 2.7.3                     September 2021                    DREADNAUT(1)

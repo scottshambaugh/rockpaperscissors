@@ -1,0 +1,75 @@
+NAUTY-LISTG(1)                   Nauty Manual                   NAUTY-LISTG(1)
+
+
+
+NAME
+       nauty-listg - display graphs in a variety of forms
+
+SYNOPSIS
+       listg   [-fp#:#l#o#Ftq]  [-a|-A|-c|-d|-e|-H|-M|-W|-L|-s|-b|-G|-y|-Yxxx]
+       [infile [outfile]]
+
+DESCRIPTION
+              Write graphs in human-readable format.
+
+       -f     : assume inputs have same size (only used from a file
+
+              and only if -p is given)
+
+       -p#, -p#:#, -p#-# : only display one graph or a sequence of
+
+       graphs.
+              The first graph is number 1.  A second number
+
+              which is empty or zero means infinity.  This option  won't  work
+              for incremental input.
+
+       -a     : write as adjacency matrix, not as list of adjacencies
+
+       -A     : same as -a with a space between entries
+
+       -l# : specify screen width limit (default 78, 0 means no limit)
+
+              This is not currently implemented with -a or -A.
+
+       -o# : specify number of first vertex (default is 0).
+
+       -d     : write output to satisfy dreadnaut
+
+       -c     : write ascii form with minimal line-breaks
+
+       -e     : write a list of edges, preceded by the order and the
+
+              number of edges
+
+       -H     : write in HCP operations research format
+
+       -M     : write in Magma format
+
+       -W     : write matrix in Maple format
+
+       -L     : (only with -M or -W) write Laplacian rather than adjacency ma-
+              trix
+
+       -b     : write in Bliss format
+
+       -G     : write in GRAPE format
+
+       -y     : write in dot file format
+
+       -Yxxx : extra dotty commands for dot files (arg  continues  to  end  of
+              param)
+
+       -t     : write upper triangle only (affects -a, -A, -d and default)
+
+       -s     : write only the numbers of vertices and edges
+
+       -F     : write a form-feed after each graph except the last
+
+       -q     : suppress auxiliary output
+
+       -a, -A, -c, -d, -M, -W, -H and -e are incompatible.
+
+
+
+nauty 2.7.3                     September 2021                  NAUTY-LISTG(1)

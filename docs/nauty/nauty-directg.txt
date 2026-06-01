@@ -1,0 +1,52 @@
+NAUTY-DIRECTG(1)                 Nauty Manual                 NAUTY-DIRECTG(1)
+
+
+
+NAME
+       nauty-directg - generate small digraphs with given underlying graph
+
+SYNOPSIS
+       directg  [-q]  [-u|-T|-G]  [-V]  [-o] [-f#] [-e#|-e#:#] [-s#/#] [infile
+       [outfile]]
+
+DESCRIPTION
+              Read undirected graphs and orient their edges  in  all  possible
+              ways.
+
+              Edges can be oriented in either or both directions (3 possibili-
+              ties).  Isomorphic directed graphs derived from the  same  input
+              are suppressed.  If the input graphs are non-isomorphic then the
+              output graphs are also.
+
+       -e# | -e#:#
+              specify a value or range of the total number of arcs
+
+       -o     orient each edge in only one direction, never both
+
+       -f#    Use only the subgroup that fixes the first # vertices setwise
+
+       -T     use a simple text output format (nv ne  edges)  instead  of  di-
+              graph6
+
+       -G     like  -T  but  includes  group  size as third item (if less than
+              10^10)
+
+              The group size does not include exchange of isolated vertices.
+
+       -V     only output graphs with nontrivial groups (including exchange of
+
+       isolated vertices).
+              The -f option is respected.
+
+       -u     no output, just count them
+
+       -s#/#  Make only a fraction of the orientations: The first integer is
+
+              the part number (first is 0) and the second  is  the  number  of
+              parts. Splitting is done per input graph independently.
+
+       -q     suppress auxiliary information
+
+
+
+nauty 2.7.3                     September 2021                NAUTY-DIRECTG(1)

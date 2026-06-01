@@ -1,0 +1,61 @@
+NAUTY-GENG(1)                    Nauty Manual                    NAUTY-GENG(1)
+
+
+
+NAME
+       nauty-geng - generate small graphs
+
+SYNOPSIS
+       geng  [-cCmtfbd#D#]  [-uygsnh] [-lvq] [-x#X#] n [mine[:maxe]] [res/mod]
+       [file]
+
+DESCRIPTION
+              Generate all graphs of a specified class.
+
+       n      : the number of vertices
+
+              mine:maxe : a range for the number of edges
+
+              #:0 means '# or more' except in the case 0:0
+
+              res/mod : only generate subset res out of subsets 0..mod-1
+
+       -c     : only write connected graphs
+
+       -C     : only write biconnected graphs
+
+       -t     : only generate triangle-free graphs
+
+       -f     : only generate 4-cycle-free graphs
+
+       -b     : only generate bipartite graphs
+
+              (-t, -f and -b can be used in any combination)
+
+       -m     : save memory at the expense of time (only makes a
+
+              difference in the absence of -b, -t, -f and n <= 28).
+
+       -d#    : a lower bound for the minimum degree
+
+       -D#    : an upper bound for the maximum degree
+
+       -v     : display counts by number of edges
+
+       -l     : canonically label output graphs
+
+       -u     : do not output any graphs, just generate and count them
+
+       -g     : use graph6 output (default)
+
+       -s     : use sparse6 output
+
+       -h     : for graph6 or sparse6 format, write a header too
+
+       -q     : suppress auxiliary output (except from -v)
+
+              See program text for much more information.
+
+
+
+nauty 2.7.3                     September 2021                   NAUTY-GENG(1)

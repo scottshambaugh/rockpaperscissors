@@ -1,0 +1,86 @@
+NAUTY-LABELG(1)                  Nauty Manual                  NAUTY-LABELG(1)
+
+
+
+NAME
+       nauty-labelg - canonically label graphs
+
+SYNOPSIS
+       labelg [-q] [-sgz | -C#W#] [-fxxx] [-S|-t]
+
+DESCRIPTION
+              [-i# -I#:# -K#] [infile [outfile]]
+
+              Canonically label a file of graphs or digraphs.
+
+       -s     force output to sparse6 format
+
+       -g     force output to graph6 format
+
+       -z     force  output  to  digraph6  format  If neither -s, -g or -z are
+              given, the output format is determined  by  the  header  or,  if
+              there is none, by the format of the first input graph. As an ex-
+              ception, digraphs are always written in digraph6 format.
+
+       -S     Use sparse representation internally.
+
+              Note that this changes the canonical labelling.  Multiple  edges
+              are not supported.  One loop per vertex is ok.
+
+       -t     Use Traces.
+
+              Note  that this changes the canonical labelling.  Multiple edges
+              and loops are not supported, nor invariants.
+
+       -C# Make an invariant in 0..#-1 and output the number of graphs
+
+       with each value of the invariant.
+              Don't write graphs unless
+
+       -W too.
+
+       -W# (requires -C) Output the graphs with this invariant value,
+
+       in their original labelling.
+              Don't write the table.
+
+              The output file will have a header if and only if the input file
+              does.
+
+       -fxxx  Specify a partition of the point set.  xxx is any
+
+       string of ASCII characters except nul.
+              This string is
+
+              considered  extended to infinity on the right with the character
+              'z'.  One character is associated with each point, in the  order
+              given.  The labelling used obeys these rules:
+
+              (1) the new order of the points is such that the associated
+
+              characters are in ASCII ascending order
+
+              (2) if two graphs are labelled using the same string xxx,
+
+              the output graphs are identical iff there is an associated-char-
+              acter-preserving isomorphism between them.   No  option  can  be
+              concatenated to the right of -f.
+
+       -i#    select  an  invariant  (1  =  twopaths,  2  =  adjtriang(K), 3 =
+              triples,
+
+              4 = quadruples, 5 = celltrips, 6 = cellquads, 7 = cellquins, 8 =
+              distances(K), 9 = indsets(K), 10 = cliques(K), 11 = cellcliq(K),
+
+              12  =  cellind(K),  13  = adjacencies, 14 = cellfano, 15 = cell-
+              fano2, 16 = refinvar(K))
+
+       -I#:#  select mininvarlevel and maxinvarlevel (default 1:1)
+
+       -K#    select invararg (default 3)
+
+       -q     suppress auxiliary information
+
+
+
+nauty 2.7.3                     September 2021                 NAUTY-LABELG(1)

@@ -1,0 +1,54 @@
+NAUTY-AMTOG(1)                   Nauty Manual                   NAUTY-AMTOG(1)
+
+
+
+NAME
+       nauty-amtog - read graphs in matrix format
+
+SYNOPSIS
+       amtog [-n#sgzhq] [-o#] [infile [outfile]]
+
+DESCRIPTION
+              Read graphs in matrix format.
+
+       -n#    Set  the  initial  graph  order  to # (no default).  This can be
+              overridden in the input.
+
+       -g     Write the output in graph6 format (default).
+
+       -s     Write the output in sparse6 format.
+
+       -z     Write the output in digraph6 format.
+
+       -h     Write a header (according to -g or -s).
+
+       -w     Don't warn about loops (which are suppressed for -g)
+
+       -q     Suppress auxiliary information.
+
+       -o#    Treat digit # as 1 and other digits as 0.
+
+              Input consists of a sequence of commands restricted to:
+
+       n=#    set number of vertices (no default) The = is optional.
+
+       m      Matrix to follow An 'm' is also assumed if a  digit  is  encoun-
+              tered.
+
+       M      Complement of matrix to follow (as m)
+
+       t      Upper triangle of matrix to follow, row by row
+
+              excluding the diagonal.
+
+       T      Complement of upper trangle to follow (as t)
+
+       s      Upper triangle of matrix to follow, row by row
+
+              excluding the diagonal; lower triangle is complement.
+
+       q      exit (optional)
+
+
+
+nauty 2.7.3                     September 2021                  NAUTY-AMTOG(1)
