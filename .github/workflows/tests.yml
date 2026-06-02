@@ -31,3 +31,20 @@ jobs:
       # inclusive n=6, two-paradox n=8). Use `-m "not slow"` for a quick subset.
       - name: Run tests
         run: uv run pytest -q --durations=10
+
+  # Build the nauty-FFI Rust census tools (rust/balanced.rs, rust/regular.rs) and
+  # check them against known small-n (total, twin-free, prime) counts + shard-sum.
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nauty headers + build tools
+        run: sudo apt-get update && sudo apt-get install -y libnauty2-dev build-essential
+
+      - name: Ensure a Rust compiler
+        run: rustc --version || rustup default stable
+
+      - name: Build + check Rust census tools
+        run: bash rust/ci_test.sh
