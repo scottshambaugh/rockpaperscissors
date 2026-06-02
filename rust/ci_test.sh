@@ -8,14 +8,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-NAUTY_H="$(find /usr/include -name nauty.h 2>/dev/null | head -1 || true)"
-[ -n "$NAUTY_H" ] || { echo "nauty.h not found — install libnauty2-dev"; exit 1; }
+# nauty.h from the distro package (/usr/include/...) or a source build (/usr/local/include)
+NAUTY_H="$(find /usr/include /usr/local/include -name nauty.h 2>/dev/null | head -1 || true)"
+[ -n "$NAUTY_H" ] || { echo "nauty.h not found — install libnauty2-dev or build nauty"; exit 1; }
 NAUTY_INC="$(dirname "$NAUTY_H")"
 echo "nauty headers: $NAUTY_INC"
 
+LINK="/tmp/ci_bshim.o -L/usr/local/lib -lnauty"  # -L covers a source-built libnauty.a
 gcc -O2 -c rust/balanced_shim.c -I"$NAUTY_INC" -o /tmp/ci_bshim.o
-rustc -O rust/balanced.rs -o /tmp/ci_balanced -C link-args="/tmp/ci_bshim.o -lnauty"
-rustc -O rust/regular.rs  -o /tmp/ci_regular  -C link-args="/tmp/ci_bshim.o -lnauty"
+rustc -O rust/balanced.rs -o /tmp/ci_balanced -C link-args="$LINK"
+rustc -O rust/regular.rs  -o /tmp/ci_regular  -C link-args="$LINK"
 
 fail=0
 expect () {  # $1 label, $2 expected substring, $3.. command

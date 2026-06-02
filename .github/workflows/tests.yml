@@ -35,13 +35,30 @@ jobs:
   # Build the nauty-FFI Rust census tools (rust/balanced.rs, rust/regular.rs) and
   # check them against known small-n (total, twin-free, prime) counts + shard-sum.
   rust:
+    # noble (24.04) renamed the nauty dev package libnauty2-dev -> libnauty-dev
+    # (nauty 2.8); older Ubuntu/Debian use libnauty2-dev. Try both, then fall back to
+    # a source build so the job self-heals on any runner.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install nauty headers + build tools
-        run: sudo apt-get update && sudo apt-get install -y libnauty2-dev build-essential
+      - name: Install nauty (headers + lib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl
+          if ! sudo apt-get install -y libnauty-dev && ! sudo apt-get install -y libnauty2-dev; then
+            echo "::warning::no nauty dev package — building from source"
+            curl -fL https://pallini.di.uniroma1.it/nauty2_8_8.tar.gz -o /tmp/nauty.tgz
+            tar -xzf /tmp/nauty.tgz -C /tmp
+            cd /tmp/nauty2_8_8
+            ./configure
+            make -j2 nauty.a || make -j2
+            sudo install -m644 nauty.h /usr/local/include/
+            a=$(ls nauty.a libnauty.a 2>/dev/null | head -1)
+            sudo install -m644 "$a" /usr/local/lib/libnauty.a
+            sudo ldconfig
+          fi
 
       - name: Ensure a Rust compiler
         run: rustc --version || rustup default stable
