@@ -241,7 +241,7 @@ def _generate_balanced(n):
 
             def keep(tup, ysum=ysum, lim=lim):
                 s = 0
-                for yi, x in zip(ysum, tup):
+                for yi, x in zip(ysum, tup, strict=False):
                     if not -lim <= yi - x <= lim:  # existing node stays feasible
                         return False
                     s += x
