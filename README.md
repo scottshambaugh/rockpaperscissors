@@ -18,20 +18,20 @@ Metrics computed per structure: `orbits` (structurally distinct strategies = aut
 
 ## Counts up to isomorphism
 
-Each fairness cell is `total (twin-free) [prime]` — the total count up to isomorphism, the twin-free subcount in parentheses, and the modular-prime subcount in brackets. **Past the brute-force range the `(twin-free) [prime]` breakdown isn't computed, so those cells show the total only** (e.g. `n ≥ 9` balanced, `n ≥ 8` inclusive). `—` means not reached. The `candidates` column is the raw brute-force search space, `3^(n choose 2)` (one of `{-1, 0, +1}` per upper-triangle edge), before any filtering. The `iso classes` column collapses that by relabeling: the number of distinct games up to isomorphism (`candidates` modulo the `S_n` action, computed in closed form by Burnside over the cycle types — `count_iso_classes(n)`), the real size of the space the fair games sit inside. It matches `1, 2, 7, 42, 582, 21480, …` and stays comparatively tame (≈ `4.2 × 10¹¹` at `n=9`) where `candidates` has already passed `10¹⁷`. It is *not* simply `3^C(n,2) / n!`: that ratio is only the identity-permutation term of the Burnside sum (and isn't even an integer), so it undercounts by the automorphism correction — slightly, by `1.032 / 1.014 / 1.006` at `n = 7 / 8 / 9` (vanishing as games become rigid). The `two-paradox` column is the **raw S₂** tournament count (`A000568`-restricted; the paradoxical+connected sub-count is the slightly smaller `1, 4, 221` at `n=7,8,9` — see the OEIS notes). Counts past the brute-force wall come from nauty + the tools in [`nauty/`](nauty/) and [`rust/`](rust/), each anchored to a known checksum (`A001174` / `A000568` / `A308239`).
+Each fairness cell is `total (twin-free) [prime]` — the total count up to isomorphism, the twin-free subcount in parentheses, and the modular-prime subcount in brackets. **Past the brute-force range the `(twin-free) [prime]` breakdown isn't computed, so those cells show the total only** (e.g. `n ≥ 10` balanced, `n ≥ 8` inclusive). `—` means not reached. The `candidates` column is the raw brute-force search space, `3^(n choose 2)` (one of `{-1, 0, +1}` per upper-triangle edge), before any filtering. The `iso classes` column collapses that by relabeling: the number of distinct games up to isomorphism (`candidates` modulo the `S_n` action, computed in closed form by Burnside over the cycle types — `count_iso_classes(n)`), the real size of the space the fair games sit inside. It matches `1, 2, 7, 42, 582, 21480, …` and stays comparatively tame (≈ `4.2 × 10¹¹` at `n=9`) where `candidates` has already passed `10¹⁷`. It is *not* simply `3^C(n,2) / n!`: that ratio is only the identity-permutation term of the Burnside sum (and isn't even an integer), so it undercounts by the automorphism correction — slightly, by `1.032 / 1.014 / 1.006` at `n = 7 / 8 / 9` (vanishing as games become rigid). The `two-paradox` column is the **raw S₂** tournament count (`A000568`-restricted; the paradoxical+connected sub-count is the slightly smaller `1, 4, 221` at `n=7,8,9` — see the OEIS notes). Counts past the brute-force wall come from nauty + the tools in [`nauty/`](nauty/) and [`rust/`](rust/), each anchored to a known checksum (`A001174` / `A000568` / `A308239`).
 
-| n  | candidates = 3^C(n,2)            | iso classes             | two-paradox | regular            | balanced           | inclusive           |
-|----|----------------------------------|-------------------------|-------------|--------------------|--------------------|---------------------|
-| 3  | 27                               | 7                       | 0           | 1 (1) [1]          | 1 (1) [1]          | 1 (1) [1]           |
-| 4  | 729                              | 42                      | 0           | 1 (1) [1]          | 1 (1) [1]          | 3 (2) [2]           |
-| 5  | 59049                            | 582                     | 0           | 2 (2) [2]          | 4 (3) [3]          | 15 (8) [7]          |
-| 6  | 14348907                         | 21480                   | 0           | 5 (4) [4]          | 16 (13) [13]       | 222 (177) [169]     |
-| 7  | 10460353203                      | 2142288                 | 1           | 13 (12) [12]       | 175 (152) [152]    | 10525 (9401) [9350] |
-| 8  | 22876792454961                   | 575016219               | 5           | 82 (76) [76]       | 5274 (4921) [4917] | 1198013             |
-| 9  | 150094635296999121               | 415939243032            | 226         | 2016 (1973) [1972] | 434017             | —                   |
-| 10 | 2954312706550833698643           | 816007449011040         | 29816       | 154831             | 90658149           | —                   |
-| 11 | 174449211009120179071170507      | 4374406209970747314     | 6959159     | 21171976           | 48825116761        | —                   |
-| 12 | 30903154382632612361920641803529 | 64539836938720749739356 | 2629321652  | 9348286118         | 68579602126387     | —                   |
+| n  | candidates = 3^C(n,2)            | iso classes             | two-paradox | regular                  | balanced                 | inclusive                   |
+|----|----------------------------------|-------------------------|-------------|--------------------------|--------------------------|-----------------------------|
+| 3  | 27                               | 7                       | 0           | 1 (1) [1]                | 1 (1) [1]                | 1 (1) [1]                   |
+| 4  | 729                              | 42                      | 0           | 1 (1) [1]                | 1 (1) [1]                | 3 (2) [2]                   |
+| 5  | 59049                            | 582                     | 0           | 2 (2) [2]                | 4 (3) [3]                | 15 (8) [7]                  |
+| 6  | 14348907                         | 21480                   | 0           | 5 (4) [4]                | 16 (13) [13]             | 222 (177) [169]             |
+| 7  | 10460353203                      | 2142288                 | 1           | 13 (12) [12]             | 175 (152) [152]          | 10525 (9401) [9350]         |
+| 8  | 22876792454961                   | 575016219               | 5           | 82 (76) [76]             | 5274 (4921) [4917]       | 1198013 (1128896) [1127592] |
+| 9  | 150094635296999121               | 415939243032            | 226         | 2016 (1973) [1972]       | 434017 (420498) [420437] | —                           |
+| 10 | 2954312706550833698643           | 816007449011040         | 29816       | 154831 (153529) [153529] | 90658149                 | —                           |
+| 11 | 174449211009120179071170507      | 4374406209970747314     | 6959159     | 21171976                 | 48825116761              | —                           |
+| 12 | 30903154382632612361920641803529 | 64539836938720749739356 | 2629321652  | 9348286118               | 68579602126387           | —                           |
 
 **OEIS cross-references.** Several columns connect to known sequences, which both validates the code and extends the table:
 
@@ -139,6 +139,15 @@ Plots use a global colormap (`viridis`) normalized to `0%`–`50%` equilibrium p
 ## Caching
 
 Search results are written to `cache/<name>.json` with human-readable filenames (`regular_n5.json`, `balanced_n5.json`, `inclusive_n5.json`, …). The filename does **not** encode the source — if you edit a search function, wipe the cache (`rm -rf cache/`) before re-running.
+
+## Long enumerations
+
+The searches can run for minutes to hours. **Always wrap a long enumeration in a [`tqdm`](https://github.com/tqdm/tqdm) progress bar** so a run is never a silent black box — `search_balanced_gen`, `search_inclusive_gen`, and `search_two_paradox` already do. Two rules that make the bar actually useful:
+
+- **Give it a `total` whenever one is knowable.** A pruned canonical augmentation has no cheap a-priori estimate of its own work, but the *final* count per tier is known (the OEIS / census tables in `generate.py`: `_BALANCED_COUNTS`, `_INCLUSIVE_COUNTS`, `_TOURNAMENT_COUNTS`, `_ISO_COUNTS`). Counting *kept* results toward that known total yields a true percentage and ETA. With no total, tqdm still shows count + rate + elapsed — which beats nothing — but you get no ETA.
+- **tqdm writes to stderr, so don't discard stderr.** A harness that runs a search as `... > out.txt 2>/dev/null` throws the bar away — the work still runs, you just go blind (this is exactly how an early balanced n=9 run lost its bar). Keep `2>&1`, or send the bar to a separate file, when you want to watch progress.
+
+For the native Rust counters (`rust/`), the equivalent is the `eprint!("\r…")` progress line — and it must be followed by `io::stderr().flush()` or it won't appear when stderr is redirected to a file.
 
 ## Layout
 

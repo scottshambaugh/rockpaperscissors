@@ -22,6 +22,15 @@ from .structure import pynauty_graph
 # generator can show a real progress total + ETA when augmenting the (n-1) classes).
 _ISO_COUNTS = {1: 1, 2: 2, 3: 7, 4: 42, 5: 582, 6: 21480}
 
+# Known final counts per tier (OEIS), used purely as a tqdm `total` so a search can
+# show a true % / ETA toward the answer it is about to (re)derive. A pruned
+# canonical augmentation has no cheap a-priori count of its own work, but the number
+# of *kept* games climbs monotonically toward these, which is a usable progress
+# signal. A308239 (balanced); inclusive is this project's own census.
+_BALANCED_COUNTS = {3: 1, 4: 1, 5: 4, 6: 16, 7: 175, 8: 5274, 9: 434017,
+                    10: 90658149, 11: 48825116761, 12: 68579602126387}
+_INCLUSIVE_COUNTS = {3: 1, 4: 3, 5: 15, 6: 222, 7: 10525, 8: 1198013}
+
 
 def canonical_key_fast(M):
     """Iso-invariant canonical key via nauty -- equal iff isomorphic, so it
@@ -67,16 +76,26 @@ def _orbit_label(n, autos):
     return [find(i) for i in range(n)]
 
 
-def _aug_orbit_reps(autos, n1, values=(-1, 0, 1)):
-    """One augmentation vector per Aut(Y)-orbit of values^(n1)."""
+def _aug_orbit_reps(autos, n1, values=(-1, 0, 1), keep=None):
+    """One augmentation vector per Aut(Y)-orbit of values^(n1).
+
+    `keep(tup)` (optional) drops infeasible augmentation vectors up front -- before
+    the orbit-dedup and the per-candidate canonical test downstream. This is only a
+    valid speedup when the predicate is constant on each Aut(Y)-orbit (so a whole
+    orbit is kept or dropped together, never split); the balance-feasibility prune
+    qualifies because permuting `tup` by an automorphism yields an isomorphic
+    augmentation with the same row-sum multiset. Building the int8 vector is deferred
+    to surviving reps, and orbit keys use plain tuples (no per-tuple numpy alloc).
+    """
     alist = [a.tolist() for a in autos]
     seen, reps = set(), []
     for tup in product(values, repeat=n1):
-        v = np.array(tup, dtype=np.int8)
-        key = min(tuple(int(x) for x in v[a]) for a in alist)
+        if keep is not None and not keep(tup):
+            continue
+        key = min(tuple(tup[a[i]] for i in range(n1)) for a in alist)
         if key not in seen:
             seen.add(key)
-            reps.append(v)
+            reps.append(np.array(tup, dtype=np.int8))
     return reps
 
 
@@ -200,6 +219,43 @@ def generate_tournaments(n):
                 yield Z
 
 
+def _generate_balanced(n):
+    """`generate_up_to_iso` specialized to the balance-feasible subtree.
+
+    Output is *identical* to `generate_up_to_iso(n, prune)` with the balance prune
+    `|row sum| <= n-k`, but the infeasible augmentation vectors are rejected up
+    front (inside `_aug_orbit_reps` via `keep`) rather than built, orbit-deduped,
+    augmented and canonical-tested only to be thrown away. The new node's row sum is
+    `sum(v)` and each existing node `i` shifts to `ysum[i] - v[i]`, so feasibility is
+    a few integer comparisons on plain ints -- no `np.sum` per candidate, which
+    profiling showed was the dominant cost (numpy dispatch overhead on tiny arrays,
+    paid billions of times). Parent row sums are computed once per parent.
+    """
+    def rec(k):
+        if k <= 1:
+            yield np.zeros((1, 1), dtype=np.int8)
+            return
+        lim = n - k
+        for Y in rec(k - 1):
+            ysum = Y.sum(axis=1).tolist()  # once per parent, not per candidate
+
+            def keep(tup, ysum=ysum, lim=lim):
+                s = 0
+                for yi, x in zip(ysum, tup):
+                    if not -lim <= yi - x <= lim:  # existing node stays feasible
+                        return False
+                    s += x
+                return -lim <= s <= lim  # new node feasible
+
+            _, autos_y = _canon_and_autos(Y)
+            for v in _aug_orbit_reps(autos_y, k - 1, keep=keep):
+                Z = _augment(Y, v)
+                if _accept(Z):
+                    yield Z
+
+    yield from rec(n)
+
+
 def search_balanced_gen(n):
     """Balanced games via isomorph-free canonical augmentation.
 
@@ -212,17 +268,19 @@ def search_balanced_gen(n):
     from .cache import cached
     from .structure import connected, paradoxical
 
-    def prune(Z, k):
-        return bool((np.abs(Z.sum(axis=1)) <= (n - k)).all())
-
     def go():
         uniform = np.ones(n) / n
         out = []
-        bar = tqdm(generate_up_to_iso(n, prune), desc=f"balanced n={n}", unit="cls", leave=False)
-        for M in bar:  # leaf prune already forces row sums == 0
+        # Total = the known balanced count (A308239): the pruned augmentation has no
+        # cheap a-priori work estimate, but kept games climb toward this, so the bar
+        # shows a true % / ETA. tqdm writes to stderr -- a run harness that wants the
+        # bar must NOT send stderr to /dev/null.
+        bar = tqdm(total=_BALANCED_COUNTS.get(n), desc=f"balanced n={n}",
+                   unit="game", leave=False)
+        for M in _generate_balanced(n):  # leaves already have all row sums == 0
             if paradoxical(M) and connected(M):
                 out.append((M.copy(), uniform))
-                bar.set_postfix_str(f"{len(out)} kept")
+                bar.update(1)
         bar.close()
         return out
 
@@ -294,7 +352,7 @@ def search_inclusive_gen(n):
             desc=f"inclusive n={n}", unit="cls", leave=False,
         )
         for Y in bar:
-            bar.set_postfix_str(f"{len(out)} found")
+            bar.set_postfix_str(f"{len(out)}/{_INCLUSIVE_COUNTS.get(n, '?')} found")
             # build every augmentation of Y at once; isomorphic duplicates from one
             # parent are fine -- the canonical-key dedup of survivors removes them.
             Zs = np.zeros((B, n, n), dtype=np.int8)

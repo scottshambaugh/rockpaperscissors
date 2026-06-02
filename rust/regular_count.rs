@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::env;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 
 // ---------- 1-WL refinement ----------
 fn refine(adj: &[u16], n: usize, init: &[u32]) -> Vec<u32> {
@@ -256,6 +256,10 @@ fn fix_sigma(edges: &[(usize, usize)], sigma: &[usize], n: usize, d: u32) -> u64
             }
         }
         cur = next;
+        if cur.len() > 120_000_000 {
+            eprintln!("[regcount] DP state count {} exceeds cap -- aborting (would OOM)", cur.len());
+            std::process::exit(2);
+        }
     }
     let mut full = vec![d as u8; n];
     let target = pack(&full);
@@ -264,7 +268,9 @@ fn fix_sigma(edges: &[(usize, usize)], sigma: &[usize], n: usize, d: u32) -> u64
 }
 
 fn main() {
-    let d: u32 = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: regcount d");
+    let d: u32 = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: regcount d [total]");
+    // optional 2nd arg: expected graph count, for a progress percentage on stderr
+    let expected: u64 = env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(0);
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines().map(|l| l.unwrap());
     let mut total: u128 = 0;
@@ -305,6 +311,18 @@ fn main() {
         }
         total += (s / (autos.len() as u64)) as u128;
         ngraphs += 1;
+        if ngraphs % 2000 == 0 {
+            if expected > 0 {
+                eprint!("\r[regcount d={}] {}/{} graphs ({:.0}%)  R so far={}     ",
+                    d, ngraphs, expected, 100.0 * ngraphs as f64 / expected as f64, total);
+            } else {
+                eprint!("\r[regcount d={}] {} graphs  R so far={}     ", d, ngraphs, total);
+            }
+            let _ = io::stderr().flush(); // \r alone won't flush a redirected stream
+        }
+    }
+    if expected > 0 {
+        eprintln!();
     }
     println!("d={} graphs={} R(n,d)={}", d, ngraphs, total);
 }

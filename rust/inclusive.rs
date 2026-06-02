@@ -120,7 +120,10 @@ fn fully_mixed(adj: &[u16], n: usize) -> bool {
 }
 
 fn main() {
-    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc n");
+    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc n [emit]");
+    // with "emit": print the upper-triangle code of each inclusive game (1=i beats j,
+    // 2=j beats i, 0=tie) so twin-free/prime can be tallied downstream.
+    let emit = env::args().nth(2).as_deref() == Some("emit");
     let stdin = io::stdin();
     let mut h = BufReader::with_capacity(1 << 20, stdin.lock());
     let (mut total, mut inc) = (0u64, 0u64);
@@ -187,7 +190,22 @@ fn main() {
         }
         if fully_mixed(&adj, nv) {
             inc += 1;
+            if emit {
+                let mut code = String::with_capacity(nv * (nv - 1) / 2);
+                for i in 0..nv {
+                    for j in (i + 1)..nv {
+                        code.push(if adj[i] & (1 << j) != 0 {
+                            '1'
+                        } else if adj[j] & (1 << i) != 0 {
+                            '2'
+                        } else {
+                            '0'
+                        });
+                    }
+                }
+                println!("{}", code);
+            }
         }
     }
-    println!("n={}: candidates={} inclusive={}", n, total, inc);
+    eprintln!("n={}: candidates={} inclusive={}", n, total, inc);
 }
