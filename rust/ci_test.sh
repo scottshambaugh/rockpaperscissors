@@ -22,6 +22,8 @@ rustc -O rust/cm_filter.rs -o /tmp/ci_cmf
 rustc -O rust/factorcrit.rs -o /tmp/ci_fc
 rustc -O rust/cm_extend.rs -o /tmp/ci_cmx
 rustc -O rust/prime_filter.rs -o /tmp/ci_prime
+rustc -O rust/inc_fast.rs -o /tmp/ci_incf
+rustc -O rust/inc_extend.rs -o /tmp/ci_incx
 
 fail=0
 expect () {  # $1 label, $2 expected substring, $3.. command
@@ -68,6 +70,26 @@ if command -v nauty-geng >/dev/null && command -v nauty-directg >/dev/null; then
                  | /tmp/ci_cmx "$2" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | /tmp/ci_prime "$2"; }
     expect "cm-prime n=5"  "total=7 prime=6"       cmprime 4 5
     expect "cm-prime n=7"  "total=7268 prime=7240" cmprime 6 7
+    # inclusive: the fast Pfaffian-classified filter and the extension method are
+    # independent algorithms; both must give the census 15 / 10525, and the
+    # extension's CM sub-stream must reproduce the cm_extend counts exactly.
+    incf () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/ci_incf "$1"; }
+    incx () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null \
+              | /tmp/ci_incx "$2" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | wc -l; }
+    expect "inclusive-fast n=5" "inclusive=15 (cm/nullity1=7"       incf 5
+    expect "inclusive-fast n=7" "inclusive=10525 (cm/nullity1=7268" incf 7
+    expect "inc-extend n=5 (from 4)" "15"    incx 4 5
+    expect "inc-extend n=7 (from 6)" "10525" incx 6 7
+    # split-stream mode: cm to stdout (7268), nullity>=3 to file (3257)
+    hi7="$(mktemp)"
+    cmside="$(nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null \
+              | /tmp/ci_incx 7 "$hi7" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | wc -l)"
+    hiside="$(nauty-labelg 2>/dev/null < "$hi7" | sort -u | wc -l)"
+    if [ "$cmside" = "7268" ] && [ "$hiside" = "3257" ]; then
+      echo "ok   inc-extend n=7 split-stream cm=7268 hi=3257"
+    else
+      echo "FAIL inc-extend split-stream: cm=$cmside hi=$hiside want 7268/3257"; fail=1
+    fi
   else
     echo "skip cm-extend checks (nauty-labelg not on PATH)"
   fi

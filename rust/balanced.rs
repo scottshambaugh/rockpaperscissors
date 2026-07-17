@@ -14,8 +14,8 @@
 use std::collections::HashSet;
 use std::os::raw::c_int;
 
-const MAXN: usize = 16;
-type Arc = [u64; MAXN];
+mod common;
+use common::{connected, is_prime, paradoxical, twin_free, Arc, MAXN};
 
 extern "C" {
     fn rps_canon(arc: *const u64, n: c_int, canong: *mut u64, lab: *mut c_int, orbits: *mut c_int);
@@ -28,13 +28,7 @@ struct Game {
     k: usize,
 }
 
-fn full_mask(n: usize) -> u64 {
-    if n >= 64 { u64::MAX } else { (1u64 << n) - 1 }
-}
 
-fn rel(arc: &Arc, x: usize, s: usize) -> i32 {
-    if (arc[x] >> s) & 1 == 1 { 1 } else if (arc[s] >> x) & 1 == 1 { -1 } else { 0 }
-}
 
 fn canon(arc: &Arc, n: usize) -> ([u64; MAXN], [i32; MAXN], [i32; MAXN]) {
     let mut canong = [0u64; MAXN];
@@ -92,96 +86,9 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
     out
 }
 
-fn paradoxical(arc: &Arc, n: usize) -> bool {
-    let mut beaten = 0u64;
-    for i in 0..n {
-        if arc[i] == 0 { return false; } // no win
-        beaten |= arc[i];
-    }
-    beaten == full_mask(n) // everyone beaten at least once
-}
 
-fn connected(arc: &Arc, n: usize) -> bool {
-    let mut adj = [0u64; MAXN];
-    for i in 0..n { adj[i] = arc[i]; }
-    for i in 0..n {
-        let mut r = arc[i];
-        while r != 0 {
-            let j = r.trailing_zeros() as usize;
-            r &= r - 1;
-            adj[j] |= 1u64 << i;
-        }
-    }
-    let mut visited = 1u64;
-    let mut frontier = 1u64;
-    while frontier != 0 {
-        let mut next = 0u64;
-        let mut f = frontier;
-        while f != 0 {
-            let vtx = f.trailing_zeros() as usize;
-            f &= f - 1;
-            next |= adj[vtx];
-        }
-        next &= !visited;
-        visited |= next;
-        frontier = next;
-    }
-    visited == full_mask(n)
-}
 
-fn twin_free(arc: &Arc, n: usize) -> bool {
-    let mut lose = [0u64; MAXN];
-    for i in 0..n {
-        let mut r = arc[i];
-        while r != 0 {
-            let j = r.trailing_zeros() as usize;
-            r &= r - 1;
-            lose[j] |= 1u64 << i;
-        }
-    }
-    for i in 0..n {
-        for j in (i + 1)..n {
-            if arc[i] == arc[j] && lose[i] == lose[j] { return false; }
-        }
-    }
-    true
-}
 
-fn is_prime(arc: &Arc, n: usize) -> bool {
-    if n < 3 { return false; }
-    let full = full_mask(n);
-    // For each seed pair {a,b}, grow the smallest module containing it: any vertex x
-    // that distinguishes the pair (relates differently to a vs. some member) must lie
-    // in every module containing the pair, so force it in and repeat. Each external x
-    // is compared against the fixed anchor a, so a vertex once consistent stays so
-    // until a newly added member splits it -> each vertex enters the stack at most
-    // once, giving O(n^2) per pair. If a closure stops short of V it is a proper
-    // nontrivial (size >= 2) module, so the game is not prime. All pairs reaching V
-    // => no proper module => prime. Every nontrivial proper module contains a pair
-    // whose closure stays within it, so nothing is missed.
-    let mut stack = [0usize; MAXN];
-    for a in 0..n {
-        for b in (a + 1)..n {
-            let mut in_s = (1u64 << a) | (1u64 << b);
-            let mut sp = 0usize;
-            stack[sp] = b; sp += 1; // a is the anchor/reference
-            while sp > 0 {
-                sp -= 1;
-                let s = stack[sp];
-                for x in 0..n {
-                    if (in_s >> x) & 1 == 1 { continue; }
-                    if rel(arc, x, s) != rel(arc, x, a) {
-                        in_s |= 1u64 << x;
-                        stack[sp] = x; sp += 1;
-                    }
-                }
-                if in_s == full { break; }
-            }
-            if in_s != full { return false; } // proper nontrivial module
-        }
-    }
-    true
-}
 
 fn descend(g: &Game, n: usize) -> (u64, u64, u64) {
     if g.k == n {

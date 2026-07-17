@@ -182,3 +182,76 @@ sort -m -u ext/c_*.d6 | /tmp/prime 9                                            
 CM prime subcounts: `1, 6, 7240` at `n = 3, 5, 7` (matching the Python census).
 For `n=9`, round-robin the merge-deduped `583591020` games to parallel `prime`
 instances (`split -n r/4 --filter`) — ~4× faster, streaming, no extra disk.
+
+## Shared module — `common.rs`
+
+The routines duplicated across tools live in `common.rs`, pulled in by a
+`mod common;` line (plain `rustc` still works — no cargo). Contents, each hoisted
+verbatim from the tool where it was validated: digraph6 `decode`/`encode` and the
+extension-method `inverse`/`dfs`/`added_is_maximal` (from `cm_extend.rs`), the
+integer Pfaffian `pf` (from `cm_filter.rs`), the allocation-free Phase-1 LP
+`fully_mixed` (from `inc_fast.rs`), and the `Arc`-bitmask tests `paradoxical`/
+`connected`/`twin_free`/`is_prime` (from `balanced.rs`). `sig_maximal` generalizes
+the canonical-deletion signature test with an eligibility predicate (used both for
+the CM all-vertices case and `inc_extend`'s nullity-restricted case). Any edit
+here is regression-checked by `ci_test.sh` — every consumer's counts must hold.
+
+## Inclusive games, the fast filter — `inc_fast.rs`
+
+Filters a digraph6 stream for **inclusive** games (paradoxical + connected + a
+fully-mixed equilibrium exists) at odd `n`, classifying by nullity via the `n`
+Pfaffian cofactors before ever touching an LP: nullity 1 ⇒ inclusive iff the
+kernel `v_i = (−1)^i Pf(M₋ᵢ)` is strictly one-signed (= completely mixed, no LP);
+all cofactors zero ⇒ nullity ≥ 3, only then run the Phase-1 LP (~0.6% of
+candidates). Validated `n=5 → 15`, `n=7 → 10525`. This makes a directg-9 scan
+(~10¹¹ candidates) feasible in ~a day of CPU — but `inc_extend.rs` below makes
+that scan unnecessary.
+
+```sh
+rustc -O inc_fast.rs -o /tmp/incf
+nauty-geng 7 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/incf 7   # 10525
+```
+
+## Inclusive games by extension — `inc_extend.rs`
+
+Extends `cm_extend`'s build-don't-filter trick to the whole inclusive family.
+The extension lemma, now for any parent: extending an 8-vertex parent `M'` with
+kernel `K` (dim `d`) by `r ∈ {−1,0,1}⁸` gives child nullity `d+1` if `r ⊥ K`,
+else `d−1`. Every nullity-`k` game has a rank-preserving deletion, so all
+inclusive 9-games are reached from 8-vertex parents two ways:
+
+- **nonsingular parent (`d=0`)**: nullity-1 children; inclusive = completely
+  mixed = the `cm_extend` cone-DFS, byte-for-byte (its emissions must dedup to
+  exactly `CM(9) = 583591020` — a built-in full-run checksum).
+- **singular parent (`d=2` almost always)**: the nullity-3 children have `r ⊥ K`
+  (2 linear equalities). Fully-mixedness collapses to **kernel coordinates**: the
+  child kernel is `{(Bᵀλ + t·w, t)}` with `M'w = −r` (via a bordered-matrix
+  inverse computed once per parent), so *child fully mixed ⇔ ∃λ ∈ R²:
+  Bᵀλ + w > 0* — 8 half-planes whose normals are fixed per parent. By Motzkin/
+  Carathéodory that system is infeasible exactly when a positive dependency of
+  ≤ 3 normals has `Σαᵢwᵢ ≤ 0`, and each dependency is linear in `r` — so the
+  fully-mixed conditions become extra *inequality rows in the same bound-pruned
+  DFS* as the perpendicularity equalities (`dfs_fused`). The tree only ever
+  reaches `r` that are already nullity-3 **and** fully mixed; the flat
+  `3⁸`-with-LP scan this replaces was ~25× slower on singular-heavy input.
+  Survivors get `paradox_connected` (a nullity-3 game can be fully mixed yet
+  disconnected — an isolated vertex contributes `eᵢ` to the kernel), and a
+  canonical-deletion prefilter restricted to nullity-`d` deletions
+  (`sig_maximal`), which cuts emission redundancy ~4× so disk stays ~answer-sized.
+  Rare `d ≥ 4` parents fall back to the flat DFS + LP.
+
+Validated `n=5 → 15`, `n=7 → 10525` with every intermediate count identical
+across the LP, per-candidate-Helly, and fused-DFS implementations. An optional
+second argument splits the two streams (`inc_extend 9 hi.d6`: nullity-3 children
+to the file, CM children to stdout) — the classes are disjoint, so they dedup
+independently and `inclusive(9) = 583591020 + |dedup(hi)|`.
+
+```sh
+rustc -O inc_extend.rs -o /tmp/incx
+nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/incx 7 \
+  | nauty-labelg 2>/dev/null | sort -u | wc -l          # 10525
+```
+
+Measured n=9 cost (uniform samples per geng edge band): ~26–40 µs/parent → ~4–5
+core-hours over all `575016219` parents, ~1.5 h wall on 4 cores + dedup; ~11 GB
+of shard files (CM stream ~10 GB, nullity-3 stream ~1 GB).

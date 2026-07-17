@@ -29,41 +29,8 @@
 use std::env;
 use std::io::{self, Read, Write};
 
-// Pfaffian of the skew submatrix of m indexed by the set bits of `mask`,
-// expanding along the lowest set index: Pf = sum_t (-1)^(t+1) a_{i0,it} Pf(rest).
-fn pf(m: &[[i64; 16]; 16], mask: u16) -> i64 {
-    if mask.count_ones() == 4 {
-        // closed form kills two recursion levels: Pf = a01*a23 - a02*a13 + a03*a12
-        let i = mask.trailing_zeros() as usize;
-        let mut r = mask & (mask - 1);
-        let j = r.trailing_zeros() as usize;
-        r &= r - 1;
-        let k = r.trailing_zeros() as usize;
-        let l = (r & (r - 1)).trailing_zeros() as usize;
-        return m[i][j] * m[k][l] - m[i][k] * m[j][l] + m[i][l] * m[j][k];
-    }
-    if mask == 0 {
-        return 1;
-    }
-    let i0 = mask.trailing_zeros() as usize;
-    let rest = mask & !(1u16 << i0);
-    if rest == 0 {
-        return 0; // odd-sized minor: Pfaffian undefined -> identically zero
-    }
-    let mut acc = 0i64;
-    let mut sign = 1i64;
-    let mut r = rest;
-    while r != 0 {
-        let j = r.trailing_zeros() as usize;
-        r &= r - 1;
-        let a = m[i0][j];
-        if a != 0 {
-            acc += sign * a * pf(m, rest & !(1u16 << j));
-        }
-        sign = -sign;
-    }
-    acc
-}
+mod common;
+use common::pf;
 
 // Completely mixed test: all n Pfaffian cofactors nonzero, alternating signs
 // (so that v_i = (-1)^i Pf_i is one-signed). Early exit on first failure.
