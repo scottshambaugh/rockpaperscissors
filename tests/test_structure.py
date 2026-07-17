@@ -10,6 +10,7 @@ from rpsfair import (
     canonicalize,
     connected,
     is_prime,
+    k_paradoxical,
     matrix_hash,
     num_equilibria,
     orbit_hashes,
@@ -62,6 +63,25 @@ def test_paradoxical_needs_win_and_loss():
     # a move with all losses, or all wins, breaks it
     M = game(3, [(0, 1), (0, 2)])  # node 0 never loses
     assert not paradoxical(M)
+
+
+def test_classical_two_paradox_rejects_games_with_ties():
+    # The common-beater relation can survive an edge being changed to a tie,
+    # but classical P2 is a tournament property and therefore rejects it.
+    M = np.array(
+        [
+            [0, -1, -1, 0, -1, 1, 1, 1],
+            [1, 0, -1, -1, 1, -1, 1, -1],
+            [1, 1, 0, -1, -1, 1, -1, -1],
+            [0, 1, 1, 0, -1, -1, -1, -1],
+            [1, -1, 1, 1, 0, -1, -1, 1],
+            [-1, 1, -1, 1, 1, 0, -1, 1],
+            [-1, -1, 1, 1, 1, 1, 0, -1],
+            [-1, 1, 1, 1, -1, -1, 1, 0],
+        ],
+        dtype=np.int8,
+    )
+    assert not k_paradoxical(M, 2)
 
 
 @pytest.mark.parametrize("M", [RPS, RPSLS, COP, BRICK, ELEM, PALEY7, ring(6)])

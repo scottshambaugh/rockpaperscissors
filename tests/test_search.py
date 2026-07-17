@@ -157,10 +157,8 @@ def test_skew_symmetric_and_zero_diagonal():
     [(search_regular, 6), (search_balanced_fast, 6), (search_inclusive, 5)],
 )
 def test_every_equilibrium_vertex_is_in_the_kernel(search, n):
-    # For fair (paradoxical, connected) games O = ker(M) ∩ Δ: every extreme
-    # equilibrium satisfies M v = 0 exactly, not merely M v <= 0. (Not true for
-    # skew-symmetric games at large -- a dominated move breaks it -- so this is a
-    # property of the category, and the null-space recipe is sufficient here.)
+    # Every searched category here is inclusive, so a positive kernel equilibrium
+    # forces O = ker(M) ∩ Δ. Paradoxicality and connectivity alone do not suffice.
     from rpsfair import equilibrium_vertices
 
     for M, _ in search(n):

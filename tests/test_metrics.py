@@ -11,6 +11,7 @@ from rpsfair import (
     node_orbits,
     num_cuts,
     num_orbits,
+    num_roles,
     tie_fraction,
 )
 
@@ -111,3 +112,8 @@ def test_gini_cop_equilibrium():
 
 def test_gini_increases_with_concentration():
     assert gini(np.array([0.1, 0.2, 0.3, 0.4])) > gini(np.array([0.22, 0.24, 0.26, 0.28]))
+
+
+def test_num_roles_combines_profile_and_equilibrium_rate():
+    assert num_roles(RPS, np.ones(3) / 3) == 1
+    assert num_roles(COP, np.array([0.2, 0.2, 0.2, 0.4])) == 4

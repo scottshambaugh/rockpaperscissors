@@ -2,9 +2,10 @@
 
 import numpy as np
 import pytest
-from toy import BRICK, COP, DOMINATED, ELEM, PALEY7, RPS, RPSLS, ring
+from toy import BOUNDARY, BRICK, COP, DOMINATED, ELEM, PALEY7, RPS, RPSLS, ring
 
 from rpsfair import (
+    equilibrium,
     equilibrium_dim,
     equilibrium_info,
     equilibrium_vertices,
@@ -13,6 +14,7 @@ from rpsfair import (
     max_entropy_equilibrium,
     maxmin_equilibrium,
     num_equilibria,
+    required_strategies,
 )
 
 ALL = [RPS, RPSLS, ring(4), ring(5), ring(6), COP, BRICK, ELEM, PALEY7]
@@ -24,7 +26,31 @@ def is_equilibrium(M, p, tol=1e-6):
     return abs(p.sum() - 1) < tol and (p >= -tol).all() and (M.astype(float) @ p <= tol).all()
 
 
-# --- kernel_dim and the parity theorem ---
+def test_equilibrium_handles_boundary_solution_outside_kernel():
+    # Paradoxical and connected, but nonsingular: its equilibrium is necessarily
+    # on the boundary and cannot be found by solving Mx=0.
+    M = BOUNDARY
+    p = equilibrium(M)
+    assert is_equilibrium(M, p)
+    assert np.allclose(p, [1 / 3, 1 / 3, 1 / 3, 0], atol=1e-7)
+    V = equilibrium_vertices(M)
+    assert len(V) == 1
+    assert np.allclose(V[0], p, atol=1e-7)
+    assert num_equilibria(M) == 1
+    assert equilibrium_dim(M) == 0
+
+
+def test_equilibrium_is_valid_on_every_n4_isomorphism_class():
+    # Exhaust the small universe, including non-fair, disconnected, dominated,
+    # singular, nonsingular, interior, and boundary-equilibrium games.
+    from rpsfair.generate import generate_up_to_iso
+
+    games = list(generate_up_to_iso(4))
+    assert len(games) == 42
+    assert all(is_equilibrium(M, equilibrium(M)) for M in games)
+
+
+# --- kernel_dim and the fully-mixed parity theorem ---
 @pytest.mark.parametrize(
     "M,expected",
     [
@@ -167,7 +193,7 @@ def test_equilibrium_dim_matches_kernel_for_this_family(M):
 
 @pytest.mark.parametrize("M", ALL)
 def test_even_n_is_never_unique(M):
-    # parity theorem: a unique equilibrium (single vertex) is possible only at odd n
+    # Every game in ALL has a fully-mixed equilibrium, so the parity theorem applies.
     if len(M) % 2 == 0:
         assert num_equilibria(M) >= 2
 
@@ -193,3 +219,18 @@ def test_equilibrium_info_high_dim_family_odd_n():
     info = equilibrium_info(ELEM)
     assert info["family_dim"] == 2
     assert info["unique"] is False
+
+
+def test_equilibrium_info_reports_unique_boundary_equilibrium():
+    info = equilibrium_info(BOUNDARY)
+    assert info["nullity"] == 0
+    assert info["fully_mixed"] is False
+    assert info["family_dim"] is None
+    assert info["unique"] is True
+    assert np.allclose(info["xs"], [1 / 3, 1 / 3, 1 / 3, 0], atol=1e-7)
+
+
+def test_required_strategies_scan_all_extreme_equilibria():
+    assert required_strategies(RPS) == [0, 1, 2]
+    assert required_strategies(COP) == [3]
+    assert required_strategies(ELEM) == []

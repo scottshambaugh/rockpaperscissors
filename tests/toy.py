@@ -50,6 +50,11 @@ PALEY7 = game(7, [(i, (i + d) % 7) for i in range(7) for d in (1, 2, 4)])
 # no fully-mixed equilibrium; unique boundary equilibrium drops the 4th move.
 DOMINATED = game(4, [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)])
 
+# Paradoxical and connected but without a fully-mixed equilibrium. Its unique
+# equilibrium is the boundary point (1/3, 1/3, 1/3, 0), disproving the tempting
+# but false extension of the inclusive kernel/parity theorem to all fair games.
+BOUNDARY = game(4, [(0, 1), (1, 2), (2, 0), (1, 3), (2, 3), (3, 0)])
+
 # A prime, rigid (|Aut|=1) *regular* n=9 game (profile (3,2,3)) with 11 extreme
 # equilibria -- the first counterexample to `prime => n_eq <= n`. Found by the
 # regular n=9 enumeration; hard-coded here so the regression test is self-contained.
