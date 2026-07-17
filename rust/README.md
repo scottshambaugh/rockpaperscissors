@@ -164,3 +164,21 @@ rustc -O cm_extend.rs -o /tmp/cmx
 nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/cmx 7 \
   | nauty-labelg 2>/dev/null | sort -u | wc -l          # 7268
 ```
+
+## Modular-prime subcount — `prime_filter.rs`
+
+Counts how many games in a digraph6 stream are **modular-prime** (no nontrivial
+module — the `[prime]` bracket of the census columns). It reuses `balanced.rs`'s
+vetted `is_prime` (the O(n²)-per-pair module-closure test) as a thin reader, so it
+can prime-filter any already-selected family. Used for the completely-mixed
+`[prime]` subcounts, including streaming the `n=9` CM games:
+
+```sh
+rustc -O prime_filter.rs -o /tmp/prime
+nauty-geng 6 | nauty-directg -o | /tmp/cmx 7 | nauty-labelg | sort -u | /tmp/prime 7   # total=7268 prime=7240
+sort -m -u ext/c_*.d6 | /tmp/prime 9                                                   # n=9 CM prime subcount
+```
+
+CM prime subcounts: `1, 6, 7240` at `n = 3, 5, 7` (matching the Python census).
+For `n=9`, round-robin the merge-deduped `583591020` games to parallel `prime`
+instances (`split -n r/4 --filter`) — ~4× faster, streaming, no extra disk.

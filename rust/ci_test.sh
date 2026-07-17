@@ -21,6 +21,7 @@ rustc -O rust/regular.rs  -o /tmp/ci_regular  -C link-args="$LINK"
 rustc -O rust/cm_filter.rs -o /tmp/ci_cmf
 rustc -O rust/factorcrit.rs -o /tmp/ci_fc
 rustc -O rust/cm_extend.rs -o /tmp/ci_cmx
+rustc -O rust/prime_filter.rs -o /tmp/ci_prime
 
 fail=0
 expect () {  # $1 label, $2 expected substring, $3.. command
@@ -61,6 +62,12 @@ if command -v nauty-geng >/dev/null && command -v nauty-directg >/dev/null; then
              | /tmp/ci_cmx "$2" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | wc -l; }
     expect "cm-extend n=5 (from 4)"  "7"    cmx 4 5
     expect "cm-extend n=7 (from 6)"  "7268" cmx 6 7
+    # prime subcount of the CM games (rust/prime_filter.rs, reusing balanced.rs's
+    # is_prime); must match the Python census [prime] brackets 6 and 7240.
+    cmprime () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null \
+                 | /tmp/ci_cmx "$2" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | /tmp/ci_prime "$2"; }
+    expect "cm-prime n=5"  "total=7 prime=6"       cmprime 4 5
+    expect "cm-prime n=7"  "total=7268 prime=7240" cmprime 6 7
   else
     echo "skip cm-extend checks (nauty-labelg not on PATH)"
   fi
