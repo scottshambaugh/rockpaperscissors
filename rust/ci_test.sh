@@ -26,11 +26,11 @@ rustc -O rust/prime_filter.rs -o /tmp/ci_prime
 rustc -O rust/inc_fast.rs -o /tmp/ci_incf
 rustc -O rust/inc_extend.rs -o /tmp/ci_incx
 rustc -O rust/inc10.rs -o /tmp/ci_inc10 -C link-args="$LINK"
-rustc -O rust/inc4.rs -o /tmp/ci_inc4 -C link-args="$LINK"
+rustc -O rust/inc_hi.rs -o /tmp/ci_inc4 -C link-args="$LINK"
 rustc -O rust/inc_strata.rs -o /tmp/ci_incs -C link-args="$LINK"
 rustc -O rust/sigma_fix.rs -o /tmp/ci_sfix
 rustc -O rust/sigma_sweep.rs -o /tmp/ci_ssweep -C link-args="$LINK"
-rustc -O rust/f3x.rs -o /tmp/ci_f3x
+rustc -O rust/f3x.rs -o /tmp/ci_f3x -C link-args="$LINK"
 rustc -O rust/labsum.rs -o /tmp/ci_labsum -C link-args="$LINK"
 rustc -O -C overflow-checks=on rust/burnside_regular.rs -o /tmp/ci_burn
 

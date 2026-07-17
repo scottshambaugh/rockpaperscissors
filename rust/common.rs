@@ -1120,3 +1120,218 @@ pub fn has_positive_kernel(m: &[[i64; 16]; 16], n: usize) -> bool {
         .collect();
     positive_dependencies(&cols, n, d).is_empty()
 }
+
+// ---- shared bound-pruned DFS core (structure lifted from inc10.rs's
+// child_dfs: L1-descending column ordering, suffix-abs-sum bounds, last-level
+// determined coordinate, optional paradox-forced coordinate masks with the
+// common-case split). inc10.rs keeps its own i32 specialization (hot path,
+// engine-specific mid-DFS prune); inc4.rs and f3x.rs run on this one. ----
+
+pub const DFS_RCAP: usize = 160;
+
+// visitation order: columns sorted by descending combined L1 over the first
+// `nrows` rows, so the bounds tighten fastest. Writes ord (position ->
+// original column) and the permuted rows.
+pub fn order_columns_l1(
+    rows: &[[i64; 16]; DFS_RCAP],
+    nrows: usize,
+    p: usize,
+    ord: &mut [usize; 16],
+    prows: &mut [[i64; 16]; DFS_RCAP],
+) {
+    let mut l1 = [0i64; 16];
+    for (c, l) in l1.iter_mut().enumerate().take(p) {
+        for row in rows.iter().take(nrows) {
+            *l += row[c].abs();
+        }
+    }
+    for (t, o) in ord.iter_mut().enumerate().take(p) {
+        *o = t;
+    }
+    ord[..p].sort_unstable_by(|&a, &b| l1[b].cmp(&l1[a]));
+    for i in 0..nrows {
+        for c in 0..p {
+            prows[i][c] = rows[i][ord[c]];
+        }
+    }
+}
+
+// asum[i][k] = sum of |row i| over columns k.. (suffix bound seeds)
+pub fn suffix_abs_sums(
+    prows: &[[i64; 16]; DFS_RCAP],
+    nrows: usize,
+    p: usize,
+    asum: &mut [[i64; 17]; DFS_RCAP],
+) {
+    for i in 0..nrows {
+        asum[i][p] = 0;
+        for k in (0..p).rev() {
+            asum[i][k] = asum[i][k + 1] + prows[i][k].abs();
+        }
+    }
+}
+
+// bound-pruned DFS over r in {-1,0,+1}^p. Rows 0..ne are EQUALITIES (dot r
+// must be exactly 0 at a leaf; pruned by |s| <= suffix bound), rows ne..nt
+// are STRICT (dot r < 0 at a leaf; pruned by reachability). fplus/fminus are
+// forced-coordinate masks in ORDERED positions (bit k set: r[k] must be
+// +1 resp. -1). The last level is solved directly from the first equality
+// row with a nonzero final coefficient. The leaf callback receives r in
+// ordered coordinates (invert with ord[] as needed).
+#[allow(clippy::too_many_arguments)]
+pub fn dfs_es(
+    k: usize,
+    p: usize,
+    ne: usize,
+    nt: usize,
+    s: &mut [i64; DFS_RCAP],
+    r: &mut [i32; 16],
+    rows: &[[i64; 16]; DFS_RCAP],
+    asum: &[[i64; 17]; DFS_RCAP],
+    fplus: u16,
+    fminus: u16,
+    leaf: &mut impl FnMut(&[i32; 16]),
+) {
+    for i in 0..ne {
+        if s[i].abs() > asum[i][k] {
+            return;
+        }
+    }
+    for i in ne..nt {
+        if s[i] - asum[i][k] >= 0 {
+            return;
+        }
+    }
+    if k == p {
+        leaf(r);
+        return;
+    }
+    if k + 1 == p {
+        let fp = (fplus >> k) & 1 != 0;
+        let fm = (fminus >> k) & 1 != 0;
+        let mut e0 = usize::MAX;
+        for e in 0..ne {
+            if rows[e][k] != 0 {
+                e0 = e;
+                break;
+            }
+        }
+        if e0 != usize::MAX {
+            // determined final coordinate
+            let c0 = rows[e0][k];
+            if s[e0] % c0 != 0 {
+                return;
+            }
+            let v = -s[e0] / c0;
+            if !(-1..=1).contains(&v) || (fp && v != 1) || (fm && v != -1) {
+                return;
+            }
+            let val = v as i32;
+            r[k] = val;
+            if val != 0 {
+                for i in 0..nt {
+                    s[i] += val as i64 * rows[i][k];
+                }
+            }
+            let mut ok = true;
+            for i in 0..ne {
+                if s[i] != 0 {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                for i in ne..nt {
+                    if s[i] >= 0 {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok {
+                leaf(r);
+            }
+            if val != 0 {
+                for i in 0..nt {
+                    s[i] -= val as i64 * rows[i][k];
+                }
+            }
+            r[k] = 0;
+            return;
+        }
+        // no equality touches this column: equality sums are already final
+        for i in 0..ne {
+            if s[i] != 0 {
+                return;
+            }
+        }
+        for val in [0i32, -1, 1] {
+            if (fp && val != 1) || (fm && val != -1) {
+                continue;
+            }
+            r[k] = val;
+            if val != 0 {
+                for i in 0..nt {
+                    s[i] += val as i64 * rows[i][k];
+                }
+            }
+            let mut ok = true;
+            for i in ne..nt {
+                if s[i] >= 0 {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                leaf(r);
+            }
+            if val != 0 {
+                for i in 0..nt {
+                    s[i] -= val as i64 * rows[i][k];
+                }
+            }
+        }
+        r[k] = 0;
+        return;
+    }
+    if fplus | fminus == 0 {
+        // common case: no forced coordinates anywhere below
+        for val in [0i32, -1, 1] {
+            r[k] = val;
+            if val != 0 {
+                for i in 0..nt {
+                    s[i] += val as i64 * rows[i][k];
+                }
+            }
+            dfs_es(k + 1, p, ne, nt, s, r, rows, asum, 0, 0, leaf);
+            if val != 0 {
+                for i in 0..nt {
+                    s[i] -= val as i64 * rows[i][k];
+                }
+            }
+        }
+        r[k] = 0;
+        return;
+    }
+    for val in [0i32, -1, 1] {
+        if (fplus >> k) & 1 != 0 && val != 1 {
+            continue;
+        }
+        if (fminus >> k) & 1 != 0 && val != -1 {
+            continue;
+        }
+        r[k] = val;
+        if val != 0 {
+            for i in 0..nt {
+                s[i] += val as i64 * rows[i][k];
+            }
+        }
+        dfs_es(k + 1, p, ne, nt, s, r, rows, asum, fplus, fminus, leaf);
+        if val != 0 {
+            for i in 0..nt {
+                s[i] -= val as i64 * rows[i][k];
+            }
+        }
+    }
+    r[k] = 0;
+}

@@ -24,16 +24,16 @@
 // Anchor (must be exact): n=8 with parents from directg-7 f3-emit:
 //   L_4 = 880,869,360.
 //
-//   rustc -O rust/inc4.rs -o /tmp/inc4 -C link-args="shim.o -lnauty"
-//   nauty-geng 7 | nauty-directg -o | /tmp/incs 7 f3-emit 3 | /tmp/inc4 8
+//   rustc -O rust/inc_hi.rs -o /tmp/inc_hi -C link-args="shim.o -lnauty"
+//   nauty-geng 7 | nauty-directg -o | /tmp/incs 7 f3-emit 3 | /tmp/inc_hi 8
 // Nullity-6 anchor: parents f3-emit 5, L_6 = 210,882:
-//   nauty-geng 7 | nauty-directg -o | /tmp/incs 7 f3-emit 5 | /tmp/inc4 8 6
+//   nauty-geng 7 | nauty-directg -o | /tmp/incs 7 f3-emit 5 | /tmp/inc_hi 8 6
 use std::env;
 use std::io::{self, Read};
 use std::os::raw::c_int;
 
 mod common;
-use common::{adjugate_ff, cone_has_nonneg, factorial, gcd_i128, kernel_basis_exact, lcm_to, paradox_connected_beats, positive_dependencies};
+use common::{adjugate_ff, cone_has_nonneg, dfs_es, factorial, gcd_i128, kernel_basis_exact, lcm_to, order_columns_l1, paradox_connected_beats, positive_dependencies, suffix_abs_sums, DFS_RCAP};
 
 extern "C" {
     fn rps_autsize(arc: *const u64, n: c_int) -> f64;
@@ -44,54 +44,8 @@ fn adjugate16(b0: &[[i128; 16]; 16], m: usize) -> ([[i128; 16]; 16], i128) {
     adjugate_ff(b0, m, true).expect("bordered singular")
 }
 
-// bound-pruned DFS: d equality rows + dependency strict rows, i128 sums
-#[allow(clippy::too_many_arguments)]
-fn dfs4(
-    k: usize,
-    p: usize,
-    ne: usize,
-    nt: usize,
-    s: &mut [i128; 160],
-    r: &mut [i32; 10],
-    rows: &[[i128; 10]; 160],
-    asum: &[[i128; 11]; 160],
-    out: &mut Vec<[i32; 10]>,
-) {
-    for i in 0..ne {
-        if s[i].abs() > asum[i][k] {
-            return;
-        }
-    }
-    for i in ne..nt {
-        if s[i] - asum[i][k] >= 0 {
-            return;
-        }
-    }
-    if k == p {
-        out.push(*r);
-        return;
-    }
-    for val in [0i32, -1, 1] {
-        r[k] = val;
-        if val != 0 {
-            let f = val as i128;
-            for i in 0..nt {
-                s[i] += f * rows[i][k];
-            }
-        }
-        dfs4(k + 1, p, ne, nt, s, r, rows, asum, out);
-        if val != 0 {
-            let f = val as i128;
-            for i in 0..nt {
-                s[i] -= f * rows[i][k];
-            }
-        }
-    }
-    r[k] = 0;
-}
-
 fn main() {
-    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc4 n [D=4|6] < f-parents");
+    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc_hi n [D=4|6] < f-parents");
     let dd: usize = env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(4);
     assert!(n % 2 == 0 && (6..=10).contains(&n));
     assert!(dd == 4 || dd == 6, "stratum D must be 4 or 6");
@@ -148,6 +102,19 @@ fn main() {
                 }
             }
             let basis = kernel_basis_exact(&m, p, d).expect("parent not nullity-3");
+            // parent degrees, for the child degree stage at leaves
+            let mut pod = [0u8; 16];
+            let mut pid = [0u8; 16];
+            for i in 0..p {
+                pod[i] = pb[i].count_ones() as u8;
+                let mut c = 0u8;
+                for u in 0..p {
+                    if pb[u] & (1 << i) != 0 {
+                        c += 1;
+                    }
+                }
+                pid[i] = c;
+            }
             // bordered adjugate
             let mut b0 = [[0i128; 16]; 16];
             for i in 0..p {
@@ -173,35 +140,75 @@ fn main() {
                 .collect();
             let deps = positive_dependencies(&cols, p, d);
             // DFS rows: d equalities (basis rows), then one strict row per
-            // dependency: sum_i alpha_i w_i > 0 <=> sum_i alpha_i sgn (ADJ_i . r) < 0
-            let mut rows = [[0i128; 10]; 160];
+            // dependency: sum_i alpha_i w_i > 0 <=> sum_i alpha_i sgn (ADJ_i . r) < 0.
+            // i64 is ample: measured max |entry| at n=8 is 680,400; the guard
+            // aborts loudly if n=10 bordered adjugates ever outgrow it.
+            let mut rows = [[0i64; 16]; DFS_RCAP];
             for t in 0..d {
                 for j in 0..p {
-                    rows[t][j] = basis[t][j] as i128;
+                    rows[t][j] = basis[t][j];
                 }
             }
             let mut nt = d;
             for (set, alpha) in &deps {
-                assert!(nt < 160, "too many dependencies");
+                assert!(nt < DFS_RCAP, "too many dependencies");
                 for j in 0..p {
                     let mut g = 0i128;
                     for (t, &i) in set.iter().enumerate() {
                         g += alpha[t] * sgn * adj[i][j];
                     }
-                    rows[nt][j] = g;
+                    assert!(g.abs() < (1i128 << 55), "dependency row overflow");
+                    rows[nt][j] = g as i64;
                 }
                 nt += 1;
             }
-            let mut asum = [[0i128; 11]; 160];
-            for i in 0..nt {
-                for k in (0..p).rev() {
-                    asum[i][k] = asum[i][k + 1] + rows[i][k].abs();
+            // paradox-forced coordinates: a parent vertex with no win must
+            // beat the new vertex (r=+1); no loss => lose to it (r=-1)
+            let mut pinn = [0u16; 16];
+            for i in 0..p {
+                let mut w = pb[i];
+                while w != 0 {
+                    let j = w.trailing_zeros() as usize;
+                    w &= w - 1;
+                    pinn[j] |= 1 << i;
                 }
             }
+            let mut ord = [0usize; 16];
+            let mut prows = [[0i64; 16]; DFS_RCAP];
+            order_columns_l1(&rows, nt, p, &mut ord, &mut prows);
+            let mut asum = [[0i64; 17]; DFS_RCAP];
+            suffix_abs_sums(&prows, nt, p, &mut asum);
+            let mut fplus = 0u16;
+            let mut fminus = 0u16;
+            let mut impossible = false;
+            for k in 0..p {
+                let c = ord[k];
+                let nw = pb[c] == 0;
+                let nl = pinn[c] == 0;
+                if nw && nl {
+                    impossible = true;
+                    break;
+                }
+                if nw {
+                    fplus |= 1 << k;
+                }
+                if nl {
+                    fminus |= 1 << k;
+                }
+            }
+            if impossible {
+                continue;
+            }
             valid.clear();
-            let mut s0 = [0i128; 160];
-            let mut r0 = [0i32; 10];
-            dfs4(0, p, d, nt, &mut s0, &mut r0, &rows, &asum, &mut valid);
+            let mut s0 = [0i64; DFS_RCAP];
+            let mut r0 = [0i32; 16];
+            dfs_es(0, p, d, nt, &mut s0, &mut r0, &prows, &asum, fplus, fminus, &mut |rv: &[i32; 16]| {
+                let mut orig = [0i32; 10];
+                for k in 0..p {
+                    orig[ord[k]] = rv[k];
+                }
+                valid.push(orig);
+            });
             if valid.is_empty() {
                 continue;
             }
@@ -238,24 +245,70 @@ fn main() {
                     }
                     wnum[i] = -sgn * a;
                 }
-                // z_D: count vertices v with a nonzero nonneg vector in the slice
-                let mut zd = 0u64;
-                // v = new vertex: slice = {t=0} -> parent's nonneg kernel: always valid
-                zd += 1;
-                for v in 0..p {
-                    // equality e.(lam, t) = 0 with e = (B_1v..B_dv, w_v);
-                    // scale w_v to integers: use (|det| * Bv..., wnum[v])
+                // two-sided rule (the stratum-2 trick generalized): instead
+                // of 1/z_D over all valid deletions, accept iff the new vertex
+                // is the sig-argmax of the child's valid-deletion set V(C),
+                // fractional 1/T on sig ties. The new vertex is ALWAYS in V(C)
+                // (the parent is F_d' by construction), so slice-cone tests
+                // run only for vertices that degree-dominate or degree-tie the
+                // new vertex -- typically 0-2 per leaf instead of p.
+                let slice_ok = |v: usize| -> bool {
                     let mut e = [0i128; 6];
                     for t in 0..d {
                         e[t] = basis[t][v] as i128 * det.abs();
                     }
                     e[d] = wnum[v];
-                    if slice_has_nonneg(&e, &basis, &wnum, det.abs(), p, d) {
-                        zd += 1;
+                    slice_has_nonneg(&e, &basis, &wnum, det.abs(), p, d)
+                };
+                let nod = nr.count_ones() as u8;
+                let mut nid = 0u8;
+                for i in 0..p {
+                    if rv[i] > 0 {
+                        nid += 1;
+                    }
+                }
+                let mut beaten = false;
+                let mut degree_ties = 0u16;
+                for v in 0..p {
+                    let cod = pod[v] + (rv[v] > 0) as u8;
+                    let cid = pid[v] + (rv[v] < 0) as u8;
+                    if cod > nod || (cod == nod && cid > nid) {
+                        if slice_ok(v) {
+                            beaten = true;
+                            break;
+                        }
+                    } else if cod == nod && cid == nid {
+                        degree_ties |= 1 << v;
+                    }
+                }
+                if beaten {
+                    continue;
+                }
+                let mut t1 = 1u64;
+                if degree_ties != 0 {
+                    // full signature comparison for degree-tied competitors
+                    let mut csig = [0u64; 16];
+                    common::vertex_sigs(&cb, n, &mut csig);
+                    let ns = csig[p];
+                    let mut reject = false;
+                    let mut mm = degree_ties;
+                    while mm != 0 {
+                        let v = mm.trailing_zeros() as usize;
+                        mm &= mm - 1;
+                        if csig[v] > ns && slice_ok(v) {
+                            reject = true;
+                            break;
+                        }
+                        if csig[v] == ns && slice_ok(v) {
+                            t1 += 1;
+                        }
+                    }
+                    if reject {
+                        continue;
                     }
                 }
                 leaves += 1;
-                sum += wp * (lcm / zd as u128);
+                sum += wp * (lcm / t1 as u128);
             }
         }
         let rem = have - nrec * reclen;

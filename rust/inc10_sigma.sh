@@ -18,12 +18,26 @@ NAUTY_INC="$(dirname "$(find /usr/include /usr/local/include -name nauty.h 2>/de
 mkdir -p "$WORK/sigma"
 cd "$WORK/sigma"
 gcc -O2 -c "$RUST/balanced_shim.c" -I"$NAUTY_INC" -o /tmp/inc10_bshim.o
-rustc -O -C target-cpu=native "$RUST/sigma_fix.rs"   -o /tmp/p_sfix
-rustc -O -C target-cpu=native "$RUST/sigma_sweep.rs" -o /tmp/p_ssweep -C link-args="$LINK"
+rustc -O -C target-cpu=native "$RUST/sigma_fix.rs"    -o /tmp/p_sfix
+rustc -O -C target-cpu=native "$RUST/sigma_ktuple.rs" -o /tmp/p_ktup -C link-args="$LINK"
+rustc -O -C target-cpu=native "$RUST/sigma_sweep.rs"  -o /tmp/p_ssweep -C link-args="$LINK"
 
-# heavy brute types: TYPE:OF (OF = 3^k shard count)
+# (2^k,1^f) types via the k-tuple class sweep (anchored: (2,2,2)=66,
+# (2,2,2,1,1)=32310, (2,2,2,2)=20298); minutes instead of core-hours
+if [ ! -f fix_2_2_2_1_1_1_1.txt ]; then
+  nauty-geng 7 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/p_ktup 7 3 2>/dev/null \
+    | grep -o "Fix_(2^3,1^4) = [0-9]*" | grep -o "[0-9]*$" > fix_2_2_2_1_1_1_1.txt
+fi
+echo "2,2,2,1,1,1,1 = $(cat fix_2_2_2_1_1_1_1.txt) [ktup]"
+if [ ! -f fix_2_2_2_2_1_1.txt ]; then
+  nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/p_ktup 6 4 2>/dev/null \
+    | grep -o "Fix_(2^4,1^2) = [0-9]*" | grep -o "[0-9]*$" > fix_2_2_2_2_1_1.txt
+fi
+echo "2,2,2,2,1,1 = $(cat fix_2_2_2_2_1_1.txt) [ktup]"
+
+# remaining heavy brute types: TYPE:OF (OF = 3^k shard count)
 for spec in "4,2,1,1,1,1:729" "3,2,2,1,1,1:729" "3,3,1,1,1,1:729" \
-            "2,2,2,2,2:19683" "2,2,2,2,1,1:19683" "2,2,2,1,1,1,1:531441"; do
+            "2,2,2,2,2:19683"; do
   TYPE="${spec%:*}"; OF="${spec#*:}"
   safe="${TYPE//,/_}"
   [ -f fix_$safe.txt ] && { echo "$TYPE = $(cat fix_$safe.txt) [cached]"; continue; }
@@ -33,7 +47,11 @@ for spec in "4,2,1,1,1,1:729" "3,2,2,1,1,1:729" "3,3,1,1,1,1:729" \
   echo "$TYPE = $(cat fix_$safe.txt)"
 done
 
-# (2,2,1^6): marked-pair sweep over the grandparent stream (sum raw accumulators)
+# (2,2,1^6): normally produced by the tee'd strata run (inc10_fix_2_2_1x6.txt);
+# recompute here only if missing
+if [ -f "$WORK/inc10_fix_2_2_1x6.txt" ] && [ ! -f fix_2_2_1_1_1_1_1_1.txt ]; then
+  cp "$WORK/inc10_fix_2_2_1x6.txt" fix_2_2_1_1_1_1_1_1.txt
+fi
 if [ ! -f fix_2_2_1_1_1_1_1_1.txt ]; then
   echo "=== 2,2,1^6 via sigma_sweep ==="
   seq 0 $((SHARDS-1)) | xargs -P"$WORKERS" -I@ sh -c '

@@ -1,5 +1,14 @@
 # inclusive(10) production runbook
 
+> **Runner: `inc_census.sh N` — one N-parametric script for both the n=8
+> rehearsal and the n=10 production run.** `bash inc_census.sh 8` must end
+> with `REHEARSAL GATE PASSED: inclusive(8) = 1198013`; only then run
+> `bash inc_census.sh 10`. Same code path, same phases, same gates: the
+> rehearsal exercises the exact pipeline production uses (the older
+> inc10_strata.sh / inc10_sigma.sh split is superseded). Heavy sigma types
+> route to the ktuple/pair sweeps automatically; the sweep's L_inc(N-2)
+> cross-check and the final integrality check are fatal gates.
+
 Everything below is anchor-gated: every engine reproduces its n=8 (or smaller)
 ground truth exactly before its n=10 output is trusted, and the assembled n=8
 pipeline must give exactly inclusive(8) = 1,198,013 before launch.
@@ -61,10 +70,10 @@ parallelism; shards are unbalanced, so use >= 32 shards under xargs -P4.
    concatenated, then `nauty-labelg | sort -S 2G -T <scratch> -u
    > parents_9_3.d6`. (f3x anchor: reproduces the inc_strata f3-emit streams
    byte-identically at n=7.) Volume estimate ~100-300M raw records / a few GB.
-3. **Stratum 4**: split parents_9_3.d6 into 4 chunks, `inc4 10 4` each, sum.
+3. **Stratum 4**: split parents_9_3.d6 into 4 chunks, `inc_hi 10 4` each, sum.
    (Calibrate first on 100k parents; n=8 rate was ~200us/parent.)
 4. **Stratum 6 parents**: same with `f3x 8 5` -> parents_9_5.d6 (tiny).
-5. **Stratum 6**: `inc4 10 6 < parents_9_5.d6` (minutes).
+5. **Stratum 6**: `inc_hi 10 6 < parents_9_5.d6` (minutes).
 
 ## Phase 2 -- sigma corrections
 
