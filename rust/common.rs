@@ -319,6 +319,42 @@ pub fn added_is_maximal(beats: &[u16], n: usize, p: usize) -> bool {
     sig_maximal(beats, n, p, |_| true)
 }
 
+
+// Full-signature comparison of vertices a vs b: (od, id, sorted-desc out- and
+// in-neighbour (od,id) lists), the same key sig_maximal uses. The caller passes
+// precomputed degree arrays (od/id of the SAME graph `beats` describes) so
+// repeated comparisons against one pivot don't recompute them.
+pub fn sig_cmp_with(beats: &[u16], n: usize, od: &[u8; 16], id: &[u8; 16], a: usize, b: usize) -> std::cmp::Ordering {
+    let ord = od[a].cmp(&od[b]).then(id[a].cmp(&id[b]));
+    if ord != std::cmp::Ordering::Equal {
+        return ord;
+    }
+    let fill = |v: usize, outs: &mut [u16; 16], ins: &mut [u16; 16]| -> (usize, usize) {
+        let (mut no, mut ni) = (0usize, 0usize);
+        for u in 0..n {
+            let du = ((od[u] as u16) << 8) | id[u] as u16;
+            if beats[v] & (1 << u) != 0 {
+                outs[no] = du;
+                no += 1;
+            }
+            if beats[u] & (1 << v) != 0 {
+                ins[ni] = du;
+                ni += 1;
+            }
+        }
+        outs[..no].sort_unstable_by(|x, y| y.cmp(x));
+        ins[..ni].sort_unstable_by(|x, y| y.cmp(x));
+        (no, ni)
+    };
+    let mut ao = [0u16; 16];
+    let mut ai = [0u16; 16];
+    let (ano, ani) = fill(a, &mut ao, &mut ai);
+    let mut bo = [0u16; 16];
+    let mut bi = [0u16; 16];
+    let (bno, bni) = fill(b, &mut bo, &mut bi);
+    ao[..ano].cmp(&bo[..bno]).then_with(|| ai[..ani].cmp(&bi[..bni]))
+}
+
 // ================= fully-mixed Phase-1 LP (from inc_fast.rs) =================
 
 const EPS: f64 = 1e-7;
@@ -414,6 +450,226 @@ pub fn fully_mixed(out: &[u16], n: usize) -> bool {
     }
     (-obj[k + n]).abs() < 1e-6
 }
+
+// ========== exact kernel/cone machinery (inclusive strata) ==========
+
+// integer kernel basis of skew m (n x n) if nullity == d, else None.
+// fraction-free RREF; basis rows are scaled to integers.
+pub fn kernel_basis_exact(m: &[[i64; 16]; 16], n: usize, d: usize) -> Option<Vec<[i64; 16]>> {
+    let mut a = [[0i128; 16]; 16];
+    for i in 0..n {
+        for j in 0..n {
+            a[i][j] = m[i][j] as i128;
+        }
+    }
+    let mut piv_col = [usize::MAX; 16];
+    let mut is_piv = [false; 16];
+    let mut row = 0usize;
+    for col in 0..n {
+        if row >= n {
+            break;
+        }
+        let mut pr = usize::MAX;
+        for r in row..n {
+            if a[r][col] != 0 {
+                pr = r;
+                break;
+            }
+        }
+        if pr == usize::MAX {
+            continue;
+        }
+        a.swap(row, pr);
+        for r in 0..n {
+            if r != row && a[r][col] != 0 {
+                let (num, den) = (a[r][col], a[row][col]);
+                for c in 0..n {
+                    a[r][c] = a[r][c] * den - num * a[row][c];
+                }
+                // keep numbers small: divide row by gcd
+                let mut g = 0i128;
+                for c in 0..n {
+                    g = gcd_i128(g, a[r][c].abs());
+                }
+                if g > 1 {
+                    for c in 0..n {
+                        a[r][c] /= g;
+                    }
+                }
+            }
+        }
+        is_piv[col] = true;
+        piv_col[row] = col;
+        row += 1;
+    }
+    if n - row != d {
+        return None;
+    }
+    let mut basis = Vec::with_capacity(d);
+    for col in 0..n {
+        if !is_piv[col] {
+            let mut v = [0i128; 16];
+            // free var col = 1 (scaled): v[col] = prod of pivots; v[pc] = -a[r][col]*...
+            // simple rational construction then clear denominators:
+            // x[col] = 1; for pivot rows: x[pc] = -a[r][col]/a[r][pc]
+            // scale by lcm of pivots
+            let mut l: i128 = 1;
+            for r in 0..row {
+                let pc = piv_col[r];
+                let pv = a[r][pc];
+                l = l / gcd_i128(l.abs(), pv.abs()).max(1) * pv;
+            }
+            let l = l.abs().max(1);
+            v[col] = l;
+            for r in 0..row {
+                let pc = piv_col[r];
+                v[pc] = -a[r][col] * (l / a[r][pc]);
+            }
+            let mut g = 0i128;
+            for c in 0..n {
+                g = gcd_i128(g, v[c].abs());
+            }
+            if g > 1 {
+                for c in 0..n {
+                    v[c] /= g;
+                }
+            }
+            let mut out = [0i64; 16];
+            for c in 0..n {
+                assert!(v[c].abs() < (1i128 << 62));
+                out[c] = v[c] as i64;
+            }
+            basis.push(out);
+        }
+    }
+    Some(basis)
+}
+
+fn gcd_i128(a: i128, b: i128) -> i128 {
+    if b == 0 { a } else { gcd_i128(b, a % b) }
+}
+
+// does the cone { y = B^T lam : y >= 0 } contain a nonzero point? B = basis
+// rows (d x n), full row rank => lambda-cone pointed => every extreme ray is
+// tight on >= d-1 independent constraints: enumerate (d-1)-subsets of the n
+// constraint normals (columns of B), take an integer nullspace vector of the
+// subset, and test both signs against all constraints. Exact integer.
+pub fn cone_has_nonneg(basis: &[[i64; 16]], n: usize, d: usize) -> bool {
+    let cols: Vec<[i64; 8]> = (0..n)
+        .map(|j| {
+            let mut c = [0i64; 8];
+            for (i, b) in basis.iter().enumerate() {
+                c[i] = b[j];
+            }
+            c
+        })
+        .collect();
+    // enumerate (d-1)-subsets
+    let mut idx = vec![0usize; d.saturating_sub(1)];
+    fn rec(
+        start: usize,
+        k: usize,
+        idx: &mut Vec<usize>,
+        pos: usize,
+        n: usize,
+        d: usize,
+        cols: &[[i64; 8]],
+    ) -> bool {
+        if pos == k {
+            // nullspace vector of the chosen (d-1) columns (each a d-vector):
+            // lam with lam . cols[i] = 0 for chosen i. Build (d-1) x d system,
+            // take generalized cross product via cofactor expansion.
+            let mut mtx = [[0i128; 8]; 8];
+            for (r, &ci) in idx.iter().enumerate() {
+                for c in 0..d {
+                    mtx[r][c] = cols[ci][c] as i128;
+                }
+            }
+            let mut lam = [0i128; 8];
+            for c in 0..d {
+                // cofactor: delete column c, det of (d-1)x(d-1), sign (-1)^c
+                let mut sub = [[0i128; 8]; 8];
+                for r in 0..(d - 1) {
+                    let mut cc = 0;
+                    for c2 in 0..d {
+                        if c2 == c {
+                            continue;
+                        }
+                        sub[r][cc] = mtx[r][c2];
+                        cc += 1;
+                    }
+                }
+                let dt = det_small(&sub, d - 1);
+                lam[c] = if c % 2 == 0 { dt } else { -dt };
+            }
+            if lam[..d].iter().all(|&x| x == 0) {
+                return false; // degenerate subset
+            }
+            // test both signs
+            'sgn: for sflip in [1i128, -1] {
+                for col in cols.iter() {
+                    let mut dot = 0i128;
+                    for c in 0..d {
+                        dot += sflip * lam[c] * col[c] as i128;
+                    }
+                    if dot < 0 {
+                        continue 'sgn;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+        for i in start..n {
+            idx[pos] = i;
+            if rec(i + 1, k, idx, pos + 1, n, d, cols) {
+                return true;
+            }
+        }
+        false
+    }
+    if d == 1 {
+        // 1-dim kernel: nonneg iff the single basis vector is one-signed
+        let pos = basis[0][..n].iter().any(|&x| x > 0);
+        let neg = basis[0][..n].iter().any(|&x| x < 0);
+        return !(pos && neg);
+    }
+    rec(0, d - 1, &mut idx, 0, n, d, &cols)
+}
+
+fn det_small(a: &[[i128; 8]; 8], m: usize) -> i128 {
+    if m == 0 {
+        return 1;
+    }
+    if m == 1 {
+        return a[0][0];
+    }
+    if m == 2 {
+        return a[0][0] * a[1][1] - a[0][1] * a[1][0];
+    }
+    // Laplace along first row (m <= 4 here)
+    let mut d = 0i128;
+    for c in 0..m {
+        if a[0][c] == 0 {
+            continue;
+        }
+        let mut sub = [[0i128; 8]; 8];
+        for r in 1..m {
+            let mut cc = 0;
+            for c2 in 0..m {
+                if c2 == c {
+                    continue;
+                }
+                sub[r - 1][cc] = a[r][c2];
+                cc += 1;
+            }
+        }
+        let s = if c % 2 == 0 { 1 } else { -1 };
+        d += s * a[0][c] * det_small(&sub, m - 1);
+    }
+    d
+}
+
 
 // ========== arc-bitmask game tests (from balanced.rs / regular.rs) ==========
 

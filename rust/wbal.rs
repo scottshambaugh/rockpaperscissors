@@ -1,13 +1,19 @@
-// Balanced-game census (total / twin-free / modular-prime) by isomorph-free
-// canonical augmentation, with nauty (densenauty, via balanced_shim.c) for the
-// canonical-parent test. Mirrors the validated Python _generate_balanced/descend:
-// every balanced n-class has a unique canonical-parent chain, so we grow one rep
-// per class and tally the leaves. Single-threaded; parallelism is by process
-// sharding (idx % nshards) since the default libnauty is not thread-safe.
+// WEIGHTED-balanced twin-free core enumerator, for the balanced (twin-free)
+// bracket complement count. A non-twin-free balanced n-game collapses (maximal
+// tie-twin classes -> one vertex each) to a unique twin-free CORE C with
+// multiplicities m_v >= 1, sum m = n, some m >= 2; the blow-up is balanced iff
+// C is m-WEIGHT-balanced: sum_u m_u rel(v, u) = 0 for every v. This enumerates
+// (C, m) pairs up to color-preserving isomorphism (weights = vertex colors,
+// nauty rps_canon_colored) for ONE weight vector, sorted descending so every
+// prefix is a valid parent family; sum over the weight partitions of n gives
+// the non-twin-free count, and  tf(n) = balanced(n) - non_tf(n).
+// Leaf conditions: weighted balance (by construction) + paradoxical +
+// connected + twin-free, all on the core (each is equivalent to the same
+// property of the blow-up).
 //
-//   build: gcc -O2 -c rust/balanced_shim.c -I/usr/include/x86_64-linux-gnu/nauty -o /tmp/bshim.o
-//          rustc -O rust/balanced.rs -o /tmp/balanced -C link-args="/tmp/bshim.o -lnauty"
-//   run  : /tmp/balanced N SPLIT NSHARDS SHARD   -> prints PARTIAL total/tf/prime
+//   build: gcc -O2 -c rust/balanced_shim.c -I$NAUTY_INC -o /tmp/bshim.o
+//          rustc -O rust/wbal.rs -o /tmp/wbal -C link-args="/tmp/bshim.o -lnauty"
+//   run  : /tmp/wbal 2,1,1,1,1,1,1,1,1 [SPLIT NSHARDS SHARD]
 //
 // arc[i] has bit (1<<j) set iff i beats j (M[i,j]==+1); ties = neither bit.
 
@@ -18,8 +24,18 @@ mod common;
 use common::{connected, is_prime, paradoxical, sig_cmp_with, twin_free, Arc, MAXN};
 
 extern "C" {
-    fn rps_canon(arc: *const u64, n: c_int, canong: *mut u64, lab: *mut c_int, orbits: *mut c_int);
+    fn rps_canon_colored(
+        arc: *const u64,
+        n: c_int,
+        col: *const c_int,
+        canong: *mut u64,
+        lab: *mut c_int,
+        orbits: *mut c_int,
+    );
 }
+
+// weight vector, set once in main before any enumeration
+static mut WEIGHTS: [i32; MAXN] = [1; MAXN];
 
 #[derive(Clone)]
 struct Game {
@@ -35,7 +51,14 @@ fn canon(arc: &Arc, n: usize) -> ([u64; MAXN], [i32; MAXN], [i32; MAXN]) {
     let mut lab = [0i32; MAXN];
     let mut orbits = [0i32; MAXN];
     unsafe {
-        rps_canon(arc.as_ptr(), n as c_int, canong.as_mut_ptr(), lab.as_mut_ptr(), orbits.as_mut_ptr());
+        rps_canon_colored(
+            arc.as_ptr(),
+            n as c_int,
+            WEIGHTS.as_ptr(),
+            canong.as_mut_ptr(),
+            lab.as_mut_ptr(),
+            orbits.as_mut_ptr(),
+        );
     }
     (canong, lab, orbits)
 }
@@ -48,7 +71,16 @@ fn canon(arc: &Arc, n: usize) -> ([u64; MAXN], [i32; MAXN], [i32; MAXN]) {
 // the flat scan burned 3^(n-1) iterations per parent to find it.
 fn children(g: &Game, n: usize) -> Vec<Game> {
     let k = g.k;
-    let lim = (n - (k + 1)) as i32;
+    // remaining weight after this augmentation = how much any weighted rowsum
+    // can still move; the added vertex has weight w_k
+    let (wk, lim) = unsafe {
+        let wk = WEIGHTS[k];
+        let mut s = 0i32;
+        for t in (k + 1)..n {
+            s += WEIGHTS[t];
+        }
+        (wk, s)
+    };
     // parent degrees, for the (od,id) prefilter below
     let mut pod = [0u8; MAXN];
     let mut pid = [0u8; MAXN];
@@ -67,18 +99,30 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
     let mut allow = [[false; 3]; MAXN]; // index a+1 for a in {-1,0,1}
     let mut smin = [0i32; MAXN + 1];
     let mut smax = [0i32; MAXN + 1];
+    // v[i] = -1 (i beats k): R(i) += wk, R(k) -= w_i
+    // v[i] = +1 (k beats i): R(i) -= wk, R(k) += w_i
     for i in 0..k {
         for (ai, a) in [-1i32, 0, 1].iter().enumerate() {
-            let r = g.rowsum[i] - a;
-            allow[i][ai] = -lim <= r && r <= lim;
+            let r = g.rowsum[i] - a * wk; // R(i) after choosing v[i] = a... sign below
+            let _ = r;
+            let eff = match ai {
+                0 => wk,  // v = -1
+                1 => 0,
+                _ => -wk, // v = +1
+            };
+            let r2 = g.rowsum[i] + eff;
+            allow[i][ai] = -lim <= r2 && r2 <= lim;
         }
         if !allow[i].iter().any(|&b| b) {
-            return out; // some row can no longer be balanced
+            return out; // some weighted row can no longer reach 0
         }
     }
+    // suffix bounds on the ADDED vertex's weighted rowsum R(k) = sum of
+    // (+w_i for v=+1, -w_i for v=-1); coordinate i contributes in [-w_i, +w_i]
+    let wi: Vec<i32> = (0..k).map(|i| unsafe { WEIGHTS[i] }).collect();
     for i in (0..k).rev() {
-        let lo = if allow[i][0] { -1 } else if allow[i][1] { 0 } else { 1 };
-        let hi = if allow[i][2] { 1 } else if allow[i][1] { 0 } else { -1 };
+        let lo = if allow[i][0] { -wi[i] } else { 0 }.min(if allow[i][2] { wi[i] } else { 0 });
+        let hi = if allow[i][2] { wi[i] } else { 0 }.max(if allow[i][0] { -wi[i] } else { 0 });
         smin[i] = smin[i + 1] + lo;
         smax[i] = smax[i + 1] + hi;
     }
@@ -105,6 +149,9 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
             let idk = (0..k).filter(|&i| v[i] == -1).count() as u8;
             let mut maximal = true;
             for i in 0..k {
+                if unsafe { WEIGHTS[i] } != wk {
+                    continue; // different color class: never competes
+                }
                 let oi = pod[i] + (v[i] == -1) as u8;
                 let ii = pid[i] + (v[i] == 1) as u8;
                 if oi > odk || (oi == odk && ii > idk) {
@@ -139,9 +186,12 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
             beats[k] = newbits16;
             cod[k] = odk;
             cid[k] = idk;
-            let mut eqmask = 0u32; // (od,id)+signature ties with k
+            let mut eqmask = 0u32; // (od,id)+signature ties with k (same color only)
             let mut sig_max = true;
             for i in 0..k {
+                if unsafe { WEIGHTS[i] } != wk {
+                    continue;
+                }
                 if cod[i] == odk && cid[i] == idk {
                     match sig_cmp_with(&beats[..k + 1], k + 1, &cod, &cid, i, k) {
                         std::cmp::Ordering::Greater => { sig_max = false; break; }
@@ -183,7 +233,7 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
                 key[..k + 1].copy_from_slice(&canong[..k + 1]);
                 if seen.insert(key) {
                     let mut rowsum = g.rowsum;
-                    for i in 0..k { rowsum[i] -= v[i]; }
+                    for i in 0..k { rowsum[i] -= v[i] * wk; }
                     rowsum[k] = s;
                     out.push(Game { arc, rowsum, k: k + 1 });
                 }
@@ -200,8 +250,8 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
             va[i] += 1;
             if !allow[i][ai] { continue; }
             let a = ai as i32 - 1;
-            let ps = part[i] + a;
-            // suffix bound: can the total still land in [-lim, lim]?
+            let ps = part[i] + a * wi[i]; // contribution to R(k): +w_i for v=+1
+            // suffix bound: can R(k) still land in [-lim, lim]?
             if ps + smin[i + 1] > lim || ps + smax[i + 1] < -lim { continue; }
             v[i] = a;
             part[i + 1] = ps;
@@ -222,45 +272,99 @@ fn children(g: &Game, n: usize) -> Vec<Game> {
 
 
 
-fn descend(g: &Game, n: usize) -> (u64, u64, u64) {
-    if g.k == n {
-        if paradoxical(&g.arc, n) && connected(&g.arc, n) {
-            return (1, twin_free(&g.arc, n) as u64, is_prime(&g.arc, n) as u64);
+static mut QMODE: bool = false;
+
+// paradox for the quotient use: the special vertex 0 may get its wins/losses
+// from INSIDE the module it stands for, so only vertices >= 1 are required to
+// have a win and a loss here; the substitution driver re-checks the composite.
+fn paradox_skip0(arc: &Arc, n: usize) -> bool {
+    let mut beaten = 0u64;
+    for i in 0..n {
+        if i > 0 && arc[i] == 0 {
+            return false;
         }
-        return (0, 0, 0);
+        beaten |= arc[i];
     }
-    let (mut t, mut f, mut p) = (0u64, 0u64, 0u64);
+    (beaten | 1) == full_mask_local(n)
+}
+fn full_mask_local(n: usize) -> u64 {
+    if n >= 64 { u64::MAX } else { (1u64 << n) - 1 }
+}
+
+fn descend(g: &Game, n: usize, out: &mut Vec<u8>) -> u64 {
+    if g.k == n {
+        let qmode = unsafe { QMODE };
+        let pass = if qmode {
+            paradox_skip0(&g.arc, n) && connected(&g.arc, n) && twin_free(&g.arc, n)
+        } else {
+            // cores must be twin-free (else the collapse was not maximal);
+            // paradox/connected of the blow-up == paradox/connected of the core
+            paradoxical(&g.arc, n) && connected(&g.arc, n) && twin_free(&g.arc, n)
+        };
+        if pass && qmode {
+            // emit digraph6 (vertex 0 = special, enumeration order preserved)
+            let mut beats = [0u16; 16];
+            for i in 0..n {
+                let mut r = g.arc[i];
+                while r != 0 {
+                    let j = r.trailing_zeros() as usize;
+                    r &= r - 1;
+                    beats[i] |= 1 << j;
+                }
+            }
+            common::encode(&beats[..n], n, out);
+            use std::io::Write;
+            std::io::stdout().write_all(out).unwrap();
+        }
+        return pass as u64;
+    }
+    let mut t = 0u64;
     for ch in children(g, n) {
-        let (a, b, c) = descend(&ch, n);
-        t += a; f += b; p += c;
+        t += descend(&ch, n, out);
     }
-    (t, f, p)
+    t
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let n: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(9);
-    let split: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(6);
+    let wspec = args.get(1).expect("usage: wbal w1,w2,... [split nshards shard]");
+    let weights: Vec<i32> = wspec.split(',').map(|s| s.parse().unwrap()).collect();
+    let n = weights.len();
+    assert!(n >= 2 && n <= 16);
+    // descending order => every prefix's weight multiset is well-defined,
+    // making prefix families valid canonical parents
+    for i in 1..n {
+        assert!(weights[i] <= weights[i - 1], "weights must be sorted descending");
+    }
+    unsafe {
+        for (i, &w) in weights.iter().enumerate() {
+            WEIGHTS[i] = w;
+        }
+    }
+    let split: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(5);
     let nshards: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(1);
     let shard: usize = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+    if args.get(5).map(|s| s == "q").unwrap_or(false) {
+        unsafe { QMODE = true; }
+    }
 
     let g0 = Game { arc: [0u64; MAXN], rowsum: [0i32; MAXN], k: 1 };
     let mut frontier = vec![g0];
-    for _ in 1..split {
+    for _ in 1..split.min(n) {
         let mut nxt = Vec::new();
         for g in &frontier { nxt.extend(children(g, n)); }
         frontier = nxt;
     }
-    eprintln!("[balanced] n={} split={} shard={}/{} roots={}", n, split, shard, nshards, frontier.len());
+    eprintln!("[wbal] w={} split={} shard={}/{} roots={}", wspec, split, shard, nshards, frontier.len());
 
-    let (mut t, mut f, mut p) = (0u64, 0u64, 0u64);
+    let mut t = 0u64;
+    let mut outbuf: Vec<u8> = Vec::new();
     for (i, g) in frontier.iter().enumerate() {
         if i % nshards != shard { continue; }
-        let (a, b, c) = descend(g, n);
-        t += a; f += b; p += c;
-        if shard == 0 && i % (nshards * 64) == 0 {
-            eprintln!("  shard0 root {}/{}  running total={}", i, frontier.len(), t);
-        }
+        t += descend(g, n, &mut outbuf);
     }
-    println!("PARTIAL n={} shard={}/{} total={} twin_free={} prime={}", n, shard, nshards, t, f, p);
+    eprintln!("WBAL w={} shard={}/{} cores={}", wspec, shard, nshards, t);
+    if !unsafe { QMODE } {
+        println!("WBAL w={} shard={}/{} cores={}", wspec, shard, nshards, t);
+    }
 }

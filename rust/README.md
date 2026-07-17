@@ -1,3 +1,24 @@
+# Rust census tools
+
+## Install requirements
+
+On Debian/Ubuntu (including WSL):
+
+```sh
+sudo apt install nauty libnauty-dev gcc rustc
+```
+
+- **`nauty`** — the command-line tools every pipeline here uses: `nauty-geng`,
+  `nauty-directg`, `nauty-labelg`, `nauty-gentourng`, `nauty-listg`,
+  `nauty-watercluster2`.
+- **`libnauty-dev`** — `nauty.h` + `libnauty`, needed only to build the two
+  FFI binaries (`balanced.rs` / `regular.rs`, which call densenauty through
+  `balanced_shim.c`). Every other tool is plain `rustc -O <file>.rs`, no cargo.
+  (Note the package is `libnauty-dev`; there is no `libnauty2-dev`.)
+
+`rust/ci_test.sh` builds everything and checks all tools against the known
+small-`n` census counts — run it after any toolchain or code change.
+
 # Fast two-paradox (S₂) tournament counting
 
 Independent, fast enumeration of **S₂ / "two-paradox" / Erdős–Schütte tournaments**
@@ -255,3 +276,38 @@ nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/incx 7 \
 Measured n=9 cost (uniform samples per geng edge band): ~26–40 µs/parent → ~4–5
 core-hours over all `575016219` parents, ~1.5 h wall on 4 cores + dedup; ~11 GB
 of shard files (CM stream ~10 GB, nullity-3 stream ~1 GB).
+
+## Counting without enumeration — `burnside_regular.rs` / `burnside_wide.rs`
+
+`regular(n)` by pure counting (no games ever built): σ-invariant labeled
+d-regular counts via an exchangeable-state DP, Burnside over cycle types, and
+an inverse Euler transform for connectivity. Validated against every known
+census value (`n = 3..12`) and the A096368 tournament strata before extending
+the column: `regular(13..16) = 12050109962241, 26133517897247816,
+193789800287451697002, 4477753123613209191571206` (1.4 s / 12 s / 114 s /
+36 min). `burnside_wide.rs` is the 256-bit build (u128 overflows past n=15)
+with a 2× memo saving from arc-reversal symmetry; both are CI-checked. The
+Python prototype (`../burnside_regular.py`) is the validated reference.
+
+## The bracket complement method — `wbal.rs` + `qfilter.rs`
+
+The `(twin-free) [prime]` brackets for a total known in closed form (balanced =
+A308239) don't need the ~98.5% of games that are twin-free and prime — only the
+structured exceptions:
+
+- **non-twin-free** balanced games are blow-ups of smaller twin-free cores with
+  multiplicities `m` (weights): balanced ⇔ the core is `m`-weight-balanced
+  (`Σ m_u rel(v,u) = 0`). `wbal.rs` enumerates weighted cores per weight
+  partition (colored nauty canon — `rps_canon_colored`); summing gives the
+  non-tf count. Anchors: 1, 3, 23, 353, 13519, 1223768 at `n = 5..10`, all exact.
+- **twin-free non-prime** games need a module of size ≥ 3 (all module row sums
+  are equal and sum to 0, so a 2-module with an arc is impossible → every
+  2-module is a tie-twin), size ≤ 6 (`t−1 ≤ k−1` for a decisive external), and
+  the quotient family is exactly the weight-`(t,1,…,1)`-balanced family
+  (`wbal … q` emit mode, or `qfilter.rs` over a directg stream). Substituting
+  the (tiny) rowsum-0 module families and deduping with `labelg` counts the
+  prime gap: 61 / 2324 at `n = 9, 10` (both quotient routes agree), 208869 at
+  `n = 11`.
+
+Result: `balanced(11) = 48825116761 (48546325240) [48546116371]` in ~70 min
+total, vs ~5 days for direct enumeration.

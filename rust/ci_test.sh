@@ -10,7 +10,7 @@ cd "$ROOT"
 
 # nauty.h from the distro package (/usr/include/...) or a source build (/usr/local/include)
 NAUTY_H="$(find /usr/include /usr/local/include -name nauty.h 2>/dev/null | head -1 || true)"
-[ -n "$NAUTY_H" ] || { echo "nauty.h not found — install libnauty2-dev or build nauty"; exit 1; }
+[ -n "$NAUTY_H" ] || { echo "nauty.h not found — sudo apt install libnauty-dev (see rust/README.md)"; exit 1; }
 NAUTY_INC="$(dirname "$NAUTY_H")"
 echo "nauty headers: $NAUTY_INC"
 
@@ -18,12 +18,14 @@ LINK="/tmp/ci_bshim.o -L/usr/local/lib -lnauty"  # -L covers a source-built libn
 gcc -O2 -c rust/balanced_shim.c -I"$NAUTY_INC" -o /tmp/ci_bshim.o
 rustc -O rust/balanced.rs -o /tmp/ci_balanced -C link-args="$LINK"
 rustc -O rust/regular.rs  -o /tmp/ci_regular  -C link-args="$LINK"
+rustc -O rust/wbal.rs     -o /tmp/ci_wbal     -C link-args="$LINK"
 rustc -O rust/cm_filter.rs -o /tmp/ci_cmf
 rustc -O rust/factorcrit.rs -o /tmp/ci_fc
 rustc -O rust/cm_extend.rs -o /tmp/ci_cmx
 rustc -O rust/prime_filter.rs -o /tmp/ci_prime
 rustc -O rust/inc_fast.rs -o /tmp/ci_incf
 rustc -O rust/inc_extend.rs -o /tmp/ci_incx
+rustc -O -C overflow-checks=on rust/burnside_regular.rs -o /tmp/ci_burn
 
 fail=0
 expect () {  # $1 label, $2 expected substring, $3.. command
@@ -36,6 +38,11 @@ expect () {  # $1 label, $2 expected substring, $3.. command
   fi
 }
 
+# weighted-balanced core enumerator (the balanced-bracket complement method):
+# identity weights reproduce tf-balanced(5); the blow-up families reproduce the
+# non-twin-free counts (bal(5): 4 total - 3 tf = 1, from the (2,1,1,1) family)
+expect "wbal identity n=5"  "cores=3" /tmp/ci_wbal 1,1,1,1,1
+expect "wbal blowup (2,1,1,1)" "cores=1" /tmp/ci_wbal 2,1,1,1
 # balanced (A308239 totals; twin-free / prime from the brute-force range)
 expect "balanced n=5" "total=4 twin_free=3 prime=3"          /tmp/ci_balanced 5 3 1 0
 expect "balanced n=6" "total=16 twin_free=13 prime=13"       /tmp/ci_balanced 6 3 1 0
@@ -96,6 +103,11 @@ if command -v nauty-geng >/dev/null && command -v nauty-directg >/dev/null; then
 else
   echo "skip completely-mixed checks (nauty-geng/nauty-directg not on PATH)"
 fi
+
+# burnside counting method (no enumeration): totals must reproduce the known
+# regular column through n=10, per-stratum (A096368: 15 regular tournaments at n=9)
+expect "burnside regular n=10" "regular(n) totals: [0, 0, 1, 1, 2, 5, 13, 82, 2016, 154831]" /tmp/ci_burn 10
+expect "burnside stratum d=4"  "d=4: connected iso by n: [0, 0, 0, 0, 0, 0, 0, 0, 15, 3987]" /tmp/ci_burn 10
 
 # sharding must partition: 3 shards of balanced n=7 sum to the whole
 s0=$(/tmp/ci_balanced 7 5 3 0 2>/dev/null); s1=$(/tmp/ci_balanced 7 5 3 1 2>/dev/null); s2=$(/tmp/ci_balanced 7 5 3 2 2>/dev/null)
