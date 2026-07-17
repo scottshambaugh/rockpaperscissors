@@ -1,5 +1,7 @@
-// Nullity-4 stratum of inclusive(even n): labeled count via the same
-// deletion-multiplicity identity as inc10.rs, one nullity level up.
+// Nullity-4 (and, with arg D=6, nullity-6) stratum of inclusive(even n):
+// labeled count via the same deletion-multiplicity identity as inc10.rs, one
+// (resp. two) nullity levels up. Everything below is written for kernel
+// dimension d = D-1 as a runtime value; only array capacities are fixed.
 //
 // Parents: (n-1)-vertex games with nullity EXACTLY 3 and a nonnegative kernel
 // vector (family F3', emitted by `inc_strata f3-emit 3`). For a child C
@@ -24,153 +26,22 @@
 //
 //   rustc -O rust/inc4.rs -o /tmp/inc4 -C link-args="shim.o -lnauty"
 //   nauty-geng 7 | nauty-directg -o | /tmp/incs 7 f3-emit 3 | /tmp/inc4 8
+// Nullity-6 anchor: parents f3-emit 5, L_6 = 210,882:
+//   nauty-geng 7 | nauty-directg -o | /tmp/incs 7 f3-emit 5 | /tmp/inc4 8 6
 use std::env;
 use std::io::{self, Read};
 use std::os::raw::c_int;
 
 mod common;
-use common::{adjugate_ff, cone_has_nonneg, factorial, gcd_i128, kernel_basis_exact, lcm_to, paradox_connected_beats};
+use common::{adjugate_ff, cone_has_nonneg, factorial, gcd_i128, kernel_basis_exact, lcm_to, paradox_connected_beats, positive_dependencies};
 
 extern "C" {
     fn rps_autsize(arc: *const u64, n: c_int) -> f64;
 }
 
 // bordered matrices here are always nonsingular; verify stays on (per-parent)
-fn adjugate12(b0: &[[i128; 12]; 12], m: usize) -> ([[i128; 12]; 12], i128) {
+fn adjugate16(b0: &[[i128; 16]; 16], m: usize) -> ([[i128; 16]; 16], i128) {
     adjugate_ff(b0, m, true).expect("bordered singular")
-}
-
-// positive dependencies (support <= d+1) of the p fixed d-columns of B:
-// subsets S with a positive vector alpha, sum alpha_i col_i = 0. Returned as
-// (indices, alpha) with integer alpha. Minimal supports have rank |S|-1.
-fn positive_dependencies(cols: &[[i64; 4]], p: usize, d: usize) -> Vec<(Vec<usize>, Vec<i128>)> {
-    let mut deps = Vec::new();
-    // size 1: zero columns
-    for i in 0..p {
-        if cols[i][..d].iter().all(|&x| x == 0) {
-            deps.push((vec![i], vec![1]));
-        }
-    }
-    // sizes 2..=d+1: alpha from cofactors of the (k-1) x d matrix of the others
-    let sizes: Vec<usize> = (2..=(d + 1)).collect();
-    for &k in &sizes {
-        let mut idx = vec![0usize; k];
-        subsets(0, p, 0, k, &mut idx, &mut |set: &[usize]| {
-            // skip if any member is a zero column (covered by size-1)
-            for &i in set {
-                if cols[i][..d].iter().all(|&x| x == 0) {
-                    return;
-                }
-            }
-            // solve sum alpha_i col_i = 0: k unknowns, d equations. minimal =>
-            // rank k-1. alpha_i = (-1)^i det(matrix without row i) using any
-            // (k-1)-subset of coordinates with full rank -- take all C(d, k-1)
-            // coordinate subsets until a nonzero cofactor vector appears.
-            let m = k - 1;
-            if m > d {
-                return;
-            }
-            let coords: Vec<usize> = (0..d).collect();
-            let mut cidx = vec![0usize; m];
-            let mut found: Option<Vec<i128>> = None;
-            subsets(0, coords.len(), 0, m, &mut cidx, &mut |cset: &[usize]| {
-                if found.is_some() {
-                    return;
-                }
-                let mut alpha = vec![0i128; k];
-                let mut nonzero = false;
-                for i in 0..k {
-                    // det of matrix rows = set minus i, cols = cset
-                    let mut mtx = [[0i128; 8]; 8];
-                    let mut rr = 0;
-                    for (t, &s) in set.iter().enumerate() {
-                        if t == i {
-                            continue;
-                        }
-                        for (cc, &co) in cset.iter().enumerate() {
-                            mtx[rr][cc] = cols[s][co] as i128;
-                        }
-                        rr += 1;
-                    }
-                    let dt = det_n(&mtx, m);
-                    alpha[i] = if i % 2 == 0 { dt } else { -dt };
-                    if dt != 0 {
-                        nonzero = true;
-                    }
-                }
-                if !nonzero {
-                    return;
-                }
-                // verify dependency and positivity (either global sign)
-                for c in 0..d {
-                    let mut s = 0i128;
-                    for i in 0..k {
-                        s += alpha[i] * cols[set[i]][c] as i128;
-                    }
-                    if s != 0 {
-                        return;
-                    }
-                }
-                let pos = alpha.iter().all(|&x| x > 0);
-                let neg = alpha.iter().all(|&x| x < 0);
-                if pos {
-                    found = Some(alpha);
-                } else if neg {
-                    found = Some(alpha.iter().map(|&x| -x).collect());
-                }
-            });
-            if let Some(alpha) = found {
-                deps.push((set.to_vec(), alpha));
-            }
-        });
-    }
-    deps
-}
-
-fn subsets(start: usize, n: usize, pos: usize, k: usize, idx: &mut Vec<usize>, f: &mut dyn FnMut(&[usize])) {
-    if pos == k {
-        f(&idx[..k]);
-        return;
-    }
-    for i in start..n {
-        idx[pos] = i;
-        subsets(i + 1, n, pos + 1, k, idx, f);
-    }
-}
-
-fn det_n(a: &[[i128; 8]; 8], m: usize) -> i128 {
-    match m {
-        0 => 1,
-        1 => a[0][0],
-        2 => a[0][0] * a[1][1] - a[0][1] * a[1][0],
-        3 => {
-            a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
-                - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
-                + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
-        }
-        _ => {
-            let mut d = 0i128;
-            for c in 0..m {
-                if a[0][c] == 0 {
-                    continue;
-                }
-                let mut sub = [[0i128; 8]; 8];
-                for r in 1..m {
-                    let mut cc = 0;
-                    for c2 in 0..m {
-                        if c2 == c {
-                            continue;
-                        }
-                        sub[r - 1][cc] = a[r][c2];
-                        cc += 1;
-                    }
-                }
-                let s = if c % 2 == 0 { 1 } else { -1 };
-                d += s * a[0][c] * det_n(&sub, m - 1);
-            }
-            d
-        }
-    }
 }
 
 // bound-pruned DFS: d equality rows + dependency strict rows, i128 sums
@@ -180,10 +51,10 @@ fn dfs4(
     p: usize,
     ne: usize,
     nt: usize,
-    s: &mut [i128; 40],
+    s: &mut [i128; 160],
     r: &mut [i32; 10],
-    rows: &[[i128; 10]; 40],
-    asum: &[[i128; 11]; 40],
+    rows: &[[i128; 10]; 160],
+    asum: &[[i128; 11]; 160],
     out: &mut Vec<[i32; 10]>,
 ) {
     for i in 0..ne {
@@ -220,10 +91,12 @@ fn dfs4(
 }
 
 fn main() {
-    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc4 n < f3-parents");
+    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc4 n [D=4|6] < f-parents");
+    let dd: usize = env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(4);
     assert!(n % 2 == 0 && (6..=10).contains(&n));
+    assert!(dd == 4 || dd == 6, "stratum D must be 4 or 6");
     let p = n - 1;
-    let d = 3usize;
+    let d = dd - 1;
     let psq = p * p;
     let pbytes = (psq + 5) / 6;
     let reclen = 2 + pbytes + 1;
@@ -276,7 +149,7 @@ fn main() {
             }
             let basis = kernel_basis_exact(&m, p, d).expect("parent not nullity-3");
             // bordered adjugate
-            let mut b0 = [[0i128; 12]; 12];
+            let mut b0 = [[0i128; 16]; 16];
             for i in 0..p {
                 for j in 0..p {
                     b0[i][j] = m[i][j] as i128;
@@ -286,12 +159,12 @@ fn main() {
                     b0[p + t][i] = basis[t][i] as i128;
                 }
             }
-            let (adj, det) = adjugate12(&b0, p + d);
+            let (adj, det) = adjugate16(&b0, p + d);
             let sgn: i128 = if det > 0 { 1 } else { -1 };
             // dependency list of the kernel columns
-            let cols: Vec<[i64; 4]> = (0..p)
+            let cols: Vec<[i64; 10]> = (0..p)
                 .map(|j| {
-                    let mut c = [0i64; 4];
+                    let mut c = [0i64; 10];
                     for t in 0..d {
                         c[t] = basis[t][j];
                     }
@@ -301,7 +174,7 @@ fn main() {
             let deps = positive_dependencies(&cols, p, d);
             // DFS rows: d equalities (basis rows), then one strict row per
             // dependency: sum_i alpha_i w_i > 0 <=> sum_i alpha_i sgn (ADJ_i . r) < 0
-            let mut rows = [[0i128; 10]; 40];
+            let mut rows = [[0i128; 10]; 160];
             for t in 0..d {
                 for j in 0..p {
                     rows[t][j] = basis[t][j] as i128;
@@ -309,7 +182,7 @@ fn main() {
             }
             let mut nt = d;
             for (set, alpha) in &deps {
-                assert!(nt < 40, "too many dependencies");
+                assert!(nt < 160, "too many dependencies");
                 for j in 0..p {
                     let mut g = 0i128;
                     for (t, &i) in set.iter().enumerate() {
@@ -319,14 +192,14 @@ fn main() {
                 }
                 nt += 1;
             }
-            let mut asum = [[0i128; 11]; 40];
+            let mut asum = [[0i128; 11]; 160];
             for i in 0..nt {
                 for k in (0..p).rev() {
                     asum[i][k] = asum[i][k + 1] + rows[i][k].abs();
                 }
             }
             valid.clear();
-            let mut s0 = [0i128; 40];
+            let mut s0 = [0i128; 160];
             let mut r0 = [0i32; 10];
             dfs4(0, p, d, nt, &mut s0, &mut r0, &rows, &asum, &mut valid);
             if valid.is_empty() {
@@ -365,25 +238,24 @@ fn main() {
                     }
                     wnum[i] = -sgn * a;
                 }
-                // z4: count vertices v with a nonzero nonneg vector in the slice
-                let mut z4 = 0u64;
+                // z_D: count vertices v with a nonzero nonneg vector in the slice
+                let mut zd = 0u64;
                 // v = new vertex: slice = {t=0} -> parent's nonneg kernel: always valid
-                z4 += 1;
+                zd += 1;
                 for v in 0..p {
-                    // equality e.(lam, t) = 0 with e = (B1v, B2v, B3v, w_v);
+                    // equality e.(lam, t) = 0 with e = (B_1v..B_dv, w_v);
                     // scale w_v to integers: use (|det| * Bv..., wnum[v])
-                    let e = [
-                        basis[0][v] as i128 * det.abs(),
-                        basis[1][v] as i128 * det.abs(),
-                        basis[2][v] as i128 * det.abs(),
-                        wnum[v],
-                    ];
-                    if slice_has_nonneg(&e, &basis, &wnum, det.abs(), p) {
-                        z4 += 1;
+                    let mut e = [0i128; 6];
+                    for t in 0..d {
+                        e[t] = basis[t][v] as i128 * det.abs();
+                    }
+                    e[d] = wnum[v];
+                    if slice_has_nonneg(&e, &basis, &wnum, det.abs(), p, d) {
+                        zd += 1;
                     }
                 }
                 leaves += 1;
-                sum += wp * (lcm / z4 as u128);
+                sum += wp * (lcm / zd as u128);
             }
         }
         let rem = have - nrec * reclen;
@@ -391,42 +263,38 @@ fn main() {
         have = rem;
     }
     let total = (n as u128) * sum;
-    assert!(total % lcm == 0, "1/z4 weights not integral");
+    assert!(total % lcm == 0, "1/z weights not integral");
     println!(
-        "n={}: parents={} leaves={} L_nullity4_labeled={}",
+        "n={}: parents={} leaves={} L_nullity{}_labeled={}",
         n,
         parents,
         leaves,
+        dd,
         total / lcm
     );
 }
 
-// does the 4-var cone { (lam,t): B^T lam + t w >= 0 (p rows), t >= 0 }
+// does the (d+1)-var cone { (lam,t): B^T lam + t w >= 0 (p rows), t >= 0 }
 // intersected with { e.(lam,t) = 0 } contain a nonzero point? Exact: project
-// onto an integer basis of e's nullspace (3-dim), then extreme-ray enumeration
+// onto an integer basis of e's nullspace (d-dim), then extreme-ray enumeration
 // via common::cone_has_nonneg on the transformed constraint columns.
-fn slice_has_nonneg(e: &[i128; 4], basis: &[[i64; 16]], wnum: &[i128; 10], absd: i128, p: usize) -> bool {
-    // integer nullspace basis of e (3 vectors in 4-space)
-    let mut nb: Vec<[i128; 4]> = Vec::with_capacity(3);
-    if e.iter().all(|&x| x == 0) {
+fn slice_has_nonneg(e: &[i128; 6], basis: &[[i64; 16]], wnum: &[i128; 10], absd: i128, p: usize, d: usize) -> bool {
+    let dv = d + 1; // ambient (lam, t) dimension
+    let mut nb: Vec<[i128; 6]> = Vec::with_capacity(d);
+    if e[..dv].iter().all(|&x| x == 0) {
         // slice = whole cone; parent membership in F3' does NOT directly apply
         // (that was the t=0 slice); the full cone contains (0,0,0,1)->w... the
         // cone contains nonzero points iff ... just use the 4 standard axes
-        nb.push([1, 0, 0, 0]);
-        nb.push([0, 1, 0, 0]);
-        nb.push([0, 0, 1, 0]);
-        // 4th direction dropped: use 3-dim subcone test on lam-space + t=free?
-        // simplest sound choice: the vector (lam,t)=(0,0,0,1) gives y = w which
-        // needs w >= 0 -- check directly; else fall through to lam-space test
-        // (t=0): B^T lam >= 0 nonzero, i.e. the parent cone: true by family.
+        // slice = whole cone; the t=0 sub-slice is the parent cone which
+        // contains a nonzero nonneg vector by family membership
         return true;
     }
-    let j = (0..4).find(|&i| e[i] != 0).unwrap();
-    for k in 0..4 {
+    let j = (0..dv).find(|&i| e[i] != 0).unwrap();
+    for k in 0..dv {
         if k == j {
             continue;
         }
-        let mut v = [0i128; 4];
+        let mut v = [0i128; 6];
         v[k] = e[j];
         v[j] = -e[k];
         let g = gcd_i128(v.iter().map(|x| x.abs()).fold(0, gcd_i128), 0).max(1);
@@ -435,22 +303,21 @@ fn slice_has_nonneg(e: &[i128; 4], basis: &[[i64; 16]], wnum: &[i128; 10], absd:
         }
         nb.push(v);
     }
-    // transformed constraint columns: for each constraint row c (in 4-space),
-    // column_t = c . nb[t]. Constraints: p rows (B1i, B2i, B3i, w_i-scaled) and
-    // (0,0,0,1) for t >= 0. Scale consistently: row_i = (|D| B1i, |D| B2i,
-    // |D| B3i, wnum_i); t-row = (0,0,0,1).
+    // transformed constraint columns: for each constraint row c (in (d+1)-
+    // space), column_t = c . nb[t]. Constraints: p rows (B_1i..B_di, w_i-
+    // scaled) and the t >= 0 row. Scale consistently: row_i =
+    // (|D| B_1i, .., |D| B_di, wnum_i); t-row = (0,..,0,1).
     let mut cols: Vec<[i64; 16]> = Vec::with_capacity(p + 1);
     for i in 0..p {
-        let row = [
-            basis[0][i] as i128 * absd,
-            basis[1][i] as i128 * absd,
-            basis[2][i] as i128 * absd,
-            wnum[i],
-        ];
+        let mut row = [0i128; 6];
+        for t in 0..d {
+            row[t] = basis[t][i] as i128 * absd;
+        }
+        row[d] = wnum[i];
         let mut col = [0i64; 16];
         for (t, b) in nb.iter().enumerate() {
             let mut dot = 0i128;
-            for c in 0..4 {
+            for c in 0..dv {
                 dot += row[c] * b[c];
             }
             // reduce magnitude
@@ -459,27 +326,28 @@ fn slice_has_nonneg(e: &[i128; 4], basis: &[[i64; 16]], wnum: &[i128; 10], absd:
         cols.push(col);
     }
     {
-        let trow = [0i128, 0, 0, 1];
+        let mut trow = [0i128; 6];
+        trow[d] = 1;
         let mut col = [0i64; 16];
         for (t, b) in nb.iter().enumerate() {
             let mut dot = 0i128;
-            for c in 0..4 {
+            for c in 0..dv {
                 dot += trow[c] * b[c];
             }
             col[t] = clampdown(dot);
         }
         cols.push(col);
     }
-    // reuse cone_has_nonneg by presenting the transposed data as a 3 x (p+1)
+    // reuse cone_has_nonneg by presenting the transposed data as a d x (p+1)
     // "basis": cone_has_nonneg(basis=d rows over n cols) tests { y = B^T lam }
     // -- exactly our transformed cone with n = p+1 constraints
-    let mut tb: Vec<[i64; 16]> = vec![[0i64; 16]; 3];
+    let mut tb: Vec<[i64; 16]> = vec![[0i64; 16]; d];
     for (ci, col) in cols.iter().enumerate() {
-        for t in 0..3 {
+        for t in 0..d {
             tb[t][ci] = col[t];
         }
     }
-    cone_has_nonneg(&tb, p + 1, 3)
+    cone_has_nonneg(&tb, p + 1, d)
 }
 
 fn clampdown(x: i128) -> i64 {

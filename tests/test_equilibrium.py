@@ -230,6 +230,14 @@ def test_equilibrium_info_reports_unique_boundary_equilibrium():
     assert np.allclose(info["xs"], [1 / 3, 1 / 3, 1 / 3, 0], atol=1e-7)
 
 
+def test_rank_reports_full_boundary_equilibrium_dimension():
+    from run import rank
+
+    result = rank([(BOUNDARY, equilibrium(BOUNDARY))])[0]
+    assert result["eqdim"] == 0
+    assert result["nverts"] == 1
+
+
 def test_required_strategies_scan_all_extreme_equilibria():
     assert required_strategies(RPS) == [0, 1, 2]
     assert required_strategies(COP) == [3]

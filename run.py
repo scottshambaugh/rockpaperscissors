@@ -6,10 +6,10 @@ import time
 
 from rpsfair import (
     automorphisms,
+    equilibrium_dim,
     gini,
     grid,
     is_prime,
-    kernel_dim,
     num_cuts,
     num_equilibria,
     num_orbits,
@@ -55,8 +55,9 @@ def rank(structures, sort=True):
                 "core": len(reduce_twins(M)[0]),
                 # modular-prime: no nontrivial module (stronger than twin-free)
                 "prime": is_prime(M),
-                # dim of the equilibrium family: 0 = unique point, >=1 = continuum
-                "eqdim": kernel_dim(M) - 1,
+                # Dimension of the full equilibrium polytope, including games
+                # whose equilibria lie only on the simplex boundary.
+                "eqdim": equilibrium_dim(M),
                 # number of extreme equilibria (vertices of O): 1 = unique solution
                 "nverts": num_equilibria(M),
             }

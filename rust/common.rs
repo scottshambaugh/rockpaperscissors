@@ -456,6 +456,12 @@ pub fn fully_mixed(out: &[u16], n: usize) -> bool {
 // integer kernel basis of skew m (n x n) if nullity == d, else None.
 // fraction-free RREF; basis rows are scaled to integers.
 pub fn kernel_basis_exact(m: &[[i64; 16]; 16], n: usize, d: usize) -> Option<Vec<[i64; 16]>> {
+    let b = kernel_basis_any(m, n);
+    if b.len() == d { Some(b) } else { None }
+}
+
+// kernel basis at whatever the nullity is (possibly empty), one RREF pass
+pub fn kernel_basis_any(m: &[[i64; 16]; 16], n: usize) -> Vec<[i64; 16]> {
     let mut a = [[0i128; 16]; 16];
     for i in 0..n {
         for j in 0..n {
@@ -502,9 +508,7 @@ pub fn kernel_basis_exact(m: &[[i64; 16]; 16], n: usize, d: usize) -> Option<Vec
         piv_col[row] = col;
         row += 1;
     }
-    if n - row != d {
-        return None;
-    }
+    let d = n - row;
     let mut basis = Vec::with_capacity(d);
     for col in 0..n {
         if !is_piv[col] {
@@ -542,7 +546,7 @@ pub fn kernel_basis_exact(m: &[[i64; 16]; 16], n: usize, d: usize) -> Option<Vec
             basis.push(out);
         }
     }
-    Some(basis)
+    basis
 }
 
 pub fn gcd_i128(a: i128, b: i128) -> i128 {
@@ -949,4 +953,170 @@ pub fn paradox_connected_beats(beats: &[u16; 16], n: usize) -> bool {
         }
     }
     connected_beats(beats, n)
+}
+
+// positive dependencies (support <= d+1) of the p fixed d-columns of B:
+// subsets S with a positive vector alpha, sum alpha_i col_i = 0. Returned as
+// (indices, alpha) with integer alpha. Minimal supports have rank |S|-1.
+pub fn positive_dependencies(cols: &[[i64; 10]], p: usize, d: usize) -> Vec<(Vec<usize>, Vec<i128>)> {
+    let mut deps = Vec::new();
+    // size 1: zero columns
+    for i in 0..p {
+        if cols[i][..d].iter().all(|&x| x == 0) {
+            deps.push((vec![i], vec![1]));
+        }
+    }
+    // sizes 2..=d+1: alpha from cofactors of the (k-1) x d matrix of the others
+    let sizes: Vec<usize> = (2..=(d + 1).min(p)).collect();
+    for &k in &sizes {
+        let mut idx = vec![0usize; k];
+        subsets(0, p, 0, k, &mut idx, &mut |set: &[usize]| {
+            // skip if any member is a zero column (covered by size-1)
+            for &i in set {
+                if cols[i][..d].iter().all(|&x| x == 0) {
+                    return;
+                }
+            }
+            // solve sum alpha_i col_i = 0: k unknowns, d equations. minimal =>
+            // rank k-1. alpha_i = (-1)^i det(matrix without row i) using any
+            // (k-1)-subset of coordinates with full rank -- take all C(d, k-1)
+            // coordinate subsets until a nonzero cofactor vector appears.
+            let m = k - 1;
+            if m > d {
+                return;
+            }
+            let coords: Vec<usize> = (0..d).collect();
+            let mut cidx = vec![0usize; m];
+            let mut found: Option<Vec<i128>> = None;
+            subsets(0, coords.len(), 0, m, &mut cidx, &mut |cset: &[usize]| {
+                if found.is_some() {
+                    return;
+                }
+                let mut alpha = vec![0i128; k];
+                let mut nonzero = false;
+                for i in 0..k {
+                    // det of matrix rows = set minus i, cols = cset
+                    let mut mtx = [[0i128; 8]; 8];
+                    let mut rr = 0;
+                    for (t, &s) in set.iter().enumerate() {
+                        if t == i {
+                            continue;
+                        }
+                        for (cc, &co) in cset.iter().enumerate() {
+                            mtx[rr][cc] = cols[s][co] as i128;
+                        }
+                        rr += 1;
+                    }
+                    let dt = det_n(&mtx, m);
+                    alpha[i] = if i % 2 == 0 { dt } else { -dt };
+                    if dt != 0 {
+                        nonzero = true;
+                    }
+                }
+                if !nonzero {
+                    return;
+                }
+                // verify dependency and positivity (either global sign)
+                for c in 0..d {
+                    let mut s = 0i128;
+                    for i in 0..k {
+                        s += alpha[i] * cols[set[i]][c] as i128;
+                    }
+                    if s != 0 {
+                        return;
+                    }
+                }
+                let pos = alpha.iter().all(|&x| x > 0);
+                let neg = alpha.iter().all(|&x| x < 0);
+                if pos {
+                    found = Some(alpha);
+                } else if neg {
+                    found = Some(alpha.iter().map(|&x| -x).collect());
+                }
+            });
+            if let Some(alpha) = found {
+                deps.push((set.to_vec(), alpha));
+            }
+        });
+    }
+    deps
+}
+
+pub fn subsets(start: usize, n: usize, pos: usize, k: usize, idx: &mut Vec<usize>, f: &mut dyn FnMut(&[usize])) {
+    if pos == k {
+        f(&idx[..k]);
+        return;
+    }
+    for i in start..n {
+        idx[pos] = i;
+        subsets(i + 1, n, pos + 1, k, idx, f);
+    }
+}
+
+pub fn det_n(a: &[[i128; 8]; 8], m: usize) -> i128 {
+    match m {
+        0 => 1,
+        1 => a[0][0],
+        2 => a[0][0] * a[1][1] - a[0][1] * a[1][0],
+        3 => {
+            a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+                - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+                + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+        }
+        _ => {
+            let mut d = 0i128;
+            for c in 0..m {
+                if a[0][c] == 0 {
+                    continue;
+                }
+                let mut sub = [[0i128; 8]; 8];
+                for r in 1..m {
+                    let mut cc = 0;
+                    for c2 in 0..m {
+                        if c2 == c {
+                            continue;
+                        }
+                        sub[r - 1][cc] = a[r][c2];
+                        cc += 1;
+                    }
+                }
+                let s = if c % 2 == 0 { 1 } else { -1 };
+                d += s * a[0][c] * det_n(&sub, m - 1);
+            }
+            d
+        }
+    }
+}
+
+
+// exists strictly positive w with Mw = 0, exact: kernel basis then Gordan
+// (no nonneg nonzero dependency among the kernel-basis columns). The row
+// sign precheck (every row both-signed or zero) is a fast necessary filter.
+pub fn has_positive_kernel(m: &[[i64; 16]; 16], n: usize) -> bool {
+    for i in 0..n {
+        let mut pos = false;
+        let mut neg = false;
+        for j in 0..n {
+            pos |= m[i][j] > 0;
+            neg |= m[i][j] < 0;
+        }
+        if pos != neg {
+            return false;
+        }
+    }
+    let basis = kernel_basis_any(m, n);
+    if basis.is_empty() {
+        return false;
+    }
+    let d = basis.len();
+    let cols: Vec<[i64; 10]> = (0..n)
+        .map(|j| {
+            let mut col = [0i64; 10];
+            for (t, b) in basis.iter().enumerate() {
+                col[t] = b[j];
+            }
+            col
+        })
+        .collect();
+    positive_dependencies(&cols, n, d).is_empty()
 }

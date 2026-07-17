@@ -25,18 +25,15 @@ from scipy.optimize import linprog, minimize
 
 
 def equilibrium(M):
-    """Optimal mixed strategy via constrained least squares: min ||Mx|| s.t. sum(x)=1.
+    """Return the canonical leximin symmetric Nash equilibrium.
 
-    NOTE: returns one particular solution; when the equilibrium set is not a single
-    point (even n with a fully-mixed family) this is non-canonical. Prefer
-    `max_entropy_equilibrium` for any reported odds or metrics.
+    This is the backwards-compatible entry point for callers that want one
+    equilibrium. It delegates to `maxmin_equilibrium`, which enforces the actual
+    Nash polytope constraints p >= 0, sum(p) = 1, and M p <= 0. In particular it
+    remains valid when no normalized kernel vector exists and the equilibrium is
+    on the simplex boundary.
     """
-    n = len(M)
-    A = np.vstack([M.astype(float), np.ones(n)])
-    b = np.zeros(n + 1)
-    b[n] = 1
-    x, *_ = np.linalg.lstsq(A, b, rcond=None)
-    return x
+    return maxmin_equilibrium(M)
 
 
 def kernel_dim(M, tol=1e-8):
@@ -323,25 +320,45 @@ def equilibrium_vertices(M, tol=1e-7):
     full solution set is the convex hull of these vertices: 1 vertex = a unique
     equilibrium, 2 = a segment (the cop game), more = a polygon/polytope.
 
-    For these (paradoxical, connected) games every equilibrium lies in ker(M)
-    -- O = {p in Delta : M p = 0} = ker(M) ∩ Delta -- so we enumerate in kernel
-    coordinates: with a kernel basis N (n x d, d = nullity), O = {c : N c >= 0,
-    1ᵀN c = 1}, a polytope with n facets in d-1 dimensions. Each vertex makes
-    d-1 of those facets tight, so we solve the d x d systems for every (d-1)-subset
-    of facets and keep the feasible, distinct points. That is O(C(n, d-1)) tiny
-    solves (d is small) instead of the O(C(2n, n-1)) n-by-n solves of a full facet
-    sweep -- orders of magnitude fewer. (That O = ker(M) ∩ Delta here, rather than
-    the larger {M p <= 0}, is verified across the enumerated games; it can fail for
-    non-paradoxical games with a dominated move, which this family excludes.)
+    When a fully-mixed equilibrium exists, positivity proves every equilibrium
+    lies in ker(M), so we use the fast kernel-coordinate enumeration. Otherwise
+    boundary equilibria need only satisfy M p <= 0. We then enumerate vertices of
+    the full polytope by selecting n-1 active inequalities from p >= 0 and M p <= 0,
+    adjoining sum(p)=1, solving, and retaining feasible full-rank intersections.
+    The general path is O(C(2n,n-1)); the fairness censuses stay on the much smaller
+    kernel path.
     """
     M = np.asarray(M, dtype=float)
     n = len(M)
+    fm, _ = has_fully_mixed(M, tol)
+    if not fm:
+        # Inequalities C p <= 0: the first n rows encode p >= 0 as -I p <= 0,
+        # followed by the Nash inequalities M p <= 0. A vertex has n-1 linearly
+        # independent active inequalities in addition to sum(p)=1.
+        C = np.vstack([-np.eye(n), M])
+        verts, seen = [], set()
+        for combo in combinations(range(2 * n), n - 1):
+            sysA = np.vstack([np.ones(n), C[list(combo)]])
+            if np.linalg.matrix_rank(sysA, tol=1e-10) < n:
+                continue
+            rhs = np.zeros(n)
+            rhs[0] = 1.0
+            p = np.linalg.solve(sysA, rhs)
+            if (C @ p <= tol).all():
+                p = np.clip(p, 0.0, None)
+                p /= p.sum()
+                key = tuple(np.round(p, 9))
+                if key not in seen:
+                    seen.add(key)
+                    verts.append(p)
+        return verts
+
     _, s, vt = np.linalg.svd(M)
     thresh = tol * max(s[0], 1.0)
     N = vt[s < thresh].T  # n x d kernel basis
     d = N.shape[1]
     if d == 0:
-        return []  # no fully-mixed family (does not occur for these games)
+        return []  # defensive: fm implies a nontrivial kernel
     ones_n = np.ones(n) @ N  # 1ᵀN, length d
     verts, seen = [], set()
     for combo in combinations(range(n), d - 1):
@@ -388,7 +405,7 @@ def equilibrium_info(M, tol=1e-8):
       fully_mixed -- whether a strictly-interior equilibrium exists
       family_dim  -- dimension of the fully-mixed equilibrium family
                      (= nullity - 1 when fully_mixed, else None)
-      unique      -- whether O's fully-mixed set is a single point
+      unique      -- whether the full equilibrium polytope O is a single point
       xs          -- canonical (leximin max-min) equilibrium, or None
     """
     nd = kernel_dim(M, tol)
@@ -398,6 +415,6 @@ def equilibrium_info(M, tol=1e-8):
         "nullity": nd,
         "fully_mixed": fm,
         "family_dim": fam,
-        "unique": (fam == 0) if fm else None,
-        "xs": maxmin_equilibrium(M),
+        "unique": num_equilibria(M, tol) == 1,
+        "xs": maxmin_equilibrium(M, tol),
     }

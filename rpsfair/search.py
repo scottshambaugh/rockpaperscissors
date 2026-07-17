@@ -119,7 +119,7 @@ def search_balanced(n):
 
         return _enumerate(n, "balanced", predicate, batch_filter=row_sum_zero)
 
-    return cached(f"balanced_n{n}", go)
+    return cached(f"balanced_brute_n{n}", go)
 
 
 def search_regular(n):
@@ -220,7 +220,7 @@ def search_balanced_stream(n):
             arrs.extend(_msperm(p, q, free - p - q))
         return arrs
 
-    return _stream_search(n, f"balanced_n{n}", "balanced", [expand])
+    return _stream_search(n, f"balanced_stream_n{n}", "balanced", [expand])
 
 
 def search_regular_stream(n):
@@ -246,7 +246,7 @@ def search_regular_stream(n):
         return expand
 
     runs = [make_expand(W) for W in range(1, (n - 1) // 2 + 1)]
-    return _stream_search(n, f"regular_n{n}", "regular", runs)
+    return _stream_search(n, f"regular_stream_n{n}", "regular", runs)
 
 
 def search_inclusive(n):
@@ -267,7 +267,7 @@ def search_inclusive(n):
 
         return _enumerate(n, "inclusive", predicate)
 
-    return cached(f"inclusive_n{n}", go)
+    return cached(f"inclusive_brute_n{n}", go)
 
 
 def search_completely_mixed(n):

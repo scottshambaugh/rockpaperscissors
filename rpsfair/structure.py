@@ -86,17 +86,20 @@ def twin_free(M):
 
 
 def k_paradoxical(M, k):
-    """Every k-subset of strategies has a common strict beater.
+    """Classical k-paradoxical tournament predicate.
 
-    A strategy C strictly beats {A_1, ..., A_k} iff M[C, A_i] == +1 for
-    every A_i (ties don't count). k=1 is the baseline paradoxical
-    property (every strategy has a beater); k=2 is the classical
-    Erdos-Schutte "two-paradox" / "paradoxical tournament" condition.
+    The classical definition is a property of tournaments, so any off-diagonal
+    tie makes this False. Within a tournament, every k-subset must have a common
+    strict beater: C beats {A_1, ..., A_k} iff M[C, A_i] == +1 for every A_i.
+    In particular, k=2 is the Erdos-Schutte "two-paradox" condition.
     """
     from itertools import combinations
 
+    M = np.asarray(M)
     n = len(M)
     if k < 1 or k > n - 1:
+        return False
+    if (M[~np.eye(n, dtype=bool)] == 0).any():
         return False
     nodes = range(n)
     for subset in combinations(nodes, k):

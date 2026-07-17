@@ -14,8 +14,11 @@ label, tier tag and region count is placed by deriving it from box edges and a
 few named gaps, with a point→data-unit factor (PT) so text blocks are centred
 rather than hand-nudged.
 
-Region counts are the known n = 7 census values (the six inclusive regions sum
-to inclusive = 10,525); completely-mixed exists only at odd n (parity theorem).
+Region counts are the modular-prime n = 7 census values (the six inclusive
+regions sum to prime inclusive = 9,350); completely-mixed exists only at odd n
+(parity theorem). The prime split per region was computed from
+cache/inclusive_n7.json with rpsfair.is_prime (the six subcounts reproduce the
+prime tier totals: regular 12, balanced 152, completely mixed 7,240).
 """
 import os
 
@@ -104,7 +107,8 @@ h_title_y = iso.top - 0.20
 axE.text(0.70, h_title_y, "iso classes", ha="left", va="top",
          fontsize=15, fontweight="bold", color=INK, zorder=8)
 axE.text(0.70, h_title_y - 15 * PT - 0.16,
-         "2,142,288 total, only 10,525 inclusive", ha="left", va="top",
+         "2,142,288 total, only 9,350 inclusive & modular-prime",
+         ha="left", va="top",
          fontsize=11.5, style="italic", color=INK_SOFT, zorder=8)
 
 # ============================================================ tier tags — each a
@@ -145,17 +149,17 @@ def centred_in(cx, y_lo, y_hi, count, label, color=INK):
 # horizontally in their column strips
 colB = (cm.left + reg.right) / 2     # regular ∩ CM
 colC = (reg.right + bal.right) / 2   # balanced ∩ CM
-count_at(colA, MID_Y, 3,    "regular\nonly")
+count_at(colA, MID_Y, 2,    "regular\nonly")
 count_at(colB, MID_Y, 10,   "regular &\ncompletely\nmixed")
 count_at(colC, MID_Y, 92,   "balanced &\ncompletely\nmixed")
-count_at(colD, MID_Y, 7166, "completely mixed,\nnot balanced", color=CM_INK)
+count_at(colD, MID_Y, 7138, "completely mixed,\nnot balanced", color=CM_INK)
 
 # --- top-of-box cells: centred in the band between the tier tag and the tier
 # below, so they never crowd the tag
 bal_band_top = (bal.top - TAG_GAP) - TAG_FS * PT / 2 - CLR
 inc_band_top = (inc.top - TAG_GAP) - TAG_FS * PT / 2 - CLR
-centred_in((bal.left + cm.left) / 2, reg.top, bal_band_top, 70, "balanced only")
-centred_in((bal.right + inc.right) / 2, cm.top, inc_band_top, 3184,
+centred_in((bal.left + cm.left) / 2, reg.top, bal_band_top, 48, "balanced only")
+centred_in((bal.right + inc.right) / 2, cm.top, inc_band_top, 2060,
            "inclusive only", color=C_INC_EDGE)
 
 # ============================================================ figure title,
@@ -163,7 +167,7 @@ centred_in((bal.right + inc.right) / 2, cm.top, inc_band_top, 3184,
 iso_cx_fig = AX[0] + (iso.cx / 14) * AX[2]
 iso_top_fig = AX[1] + (iso.top / 10) * AX[3]
 fig.text(iso_cx_fig, iso_top_fig + 0.05,
-         "Fair Rock-Paper-Scissors games at n = 7",
+         "Prime fair Rock-Paper-Scissors games at n = 7",
          ha="center", va="center", fontsize=18, fontweight="bold", color=INK)
 
 out = os.path.join(PLOTS_DIR, "fairness_euler.png")

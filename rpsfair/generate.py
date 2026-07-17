@@ -294,7 +294,7 @@ def search_balanced_gen(n):
         bar.close()
         return out
 
-    return cached(f"balanced_n{n}", go)
+    return cached(f"balanced_gen_n{n}", go)
 
 
 from .structure import paradoxical_batch as _paradoxical_batch  # noqa: E402
@@ -388,7 +388,7 @@ def search_inclusive_gen(n):
         bar.close()
         return out
 
-    return cached(f"inclusive_n{n}", go)
+    return cached(f"inclusive_gen_n{n}", go)
 
 
 # A000568: number of tournaments on n nodes up to iso -- the progress total for
@@ -399,10 +399,10 @@ _TOURNAMENT_COUNTS = {1: 1, 2: 1, 3: 2, 4: 4, 5: 12, 6: 56, 7: 456, 8: 6880, 9: 
 def search_two_paradox(n):
     """Two-paradox (P2 / Erdos-Schutte) games at size n, up to isomorphism.
 
-    P2 -- every *pair* of strategies has a common strict beater -- forces a
-    tie-free tournament (a tie offers no beater), so the authoritative count is
-    a filter over *all* tournament classes, enumerated once each by canonical
-    augmentation (`generate_tournaments`). Crucially this is NOT a refinement of
+    Classical P2 is defined on tournaments: every pair of strategies has a
+    common strict beater. The authoritative count is therefore a filter over
+    *all* tournament classes, enumerated once each by canonical augmentation
+    (`generate_tournaments`). Crucially this is NOT a refinement of
     the regular/balanced/inclusive fairness ladder: the n=8 two-paradox games
     are none of those (no even-n tournament is regular or balanced, and they
     lack a fully-mixed equilibrium), so post-filtering a fairness tier

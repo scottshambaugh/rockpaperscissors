@@ -28,6 +28,10 @@ rustc -O rust/inc_extend.rs -o /tmp/ci_incx
 rustc -O rust/inc10.rs -o /tmp/ci_inc10 -C link-args="$LINK"
 rustc -O rust/inc4.rs -o /tmp/ci_inc4 -C link-args="$LINK"
 rustc -O rust/inc_strata.rs -o /tmp/ci_incs -C link-args="$LINK"
+rustc -O rust/sigma_fix.rs -o /tmp/ci_sfix
+rustc -O rust/sigma_sweep.rs -o /tmp/ci_ssweep -C link-args="$LINK"
+rustc -O rust/f3x.rs -o /tmp/ci_f3x
+rustc -O rust/labsum.rs -o /tmp/ci_labsum -C link-args="$LINK"
 rustc -O -C overflow-checks=on rust/burnside_regular.rs -o /tmp/ci_burn
 
 fail=0
@@ -99,6 +103,27 @@ if command -v nauty-geng >/dev/null && command -v nauty-directg >/dev/null; then
     expect "inc10 nullity-2 n=6" "L_nullity2_labeled=126900"      inc10a 4 6
     expect "inc10 nullity-2 n=8" "L_nullity2_labeled=45897886776" inc10a 6 8
     expect "inc4 nullity-4 n=6"  "L_nullity4_labeled=4050"        inc4a 5 6
+    inc6a () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null \
+               | /tmp/ci_incs "$1" f3-emit 5 2>/dev/null | /tmp/ci_inc4 "$2" 6; }
+    expect "inc4 nullity-6 n=8"  "L_nullity6_labeled=210882"      inc6a 7 8
+    # f3x parent generator must reproduce the inc_strata f3-emit streams
+    f3xn () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null \
+              | /tmp/ci_f3x "$1" "$2" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | wc -l; }
+    expect "f3x d=3 classes n=7" "31257" f3xn 6 3
+    expect "f3x d=5 classes n=7" "186"   f3xn 6 5
+    # sigma-corrections: brute Fix per cycle type (hand-checkable + Burnside
+    # micro-gate at n=3: (L_inc(3) + 3*0 + 2*2)/6 = 1) and the marked-pair
+    # sweep whose formula must reproduce the brute (2,2,1^4) value
+    expect "sigma fix (3)"       "fix=2"      /tmp/ci_sfix 3
+    expect "sigma fix (2,1)"     "fix=0"      /tmp/ci_sfix 2,1
+    expect "sigma L_inc(4)"      "fix=42"     /tmp/ci_sfix 1,1,1,1
+    expect "sigma L_inc(5)"      "fix=978"    /tmp/ci_sfix 1,1,1,1,1
+    expect "sigma fix (2,2,1^4)" "fix=339138" /tmp/ci_sfix 2,2,1,1,1,1
+    ssweep6 () { nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/ci_ssweep 6; }
+    expect "sigma sweep n=6"     "Fix_(2,2,1^4) = 339138" ssweep6
+    labsum5 () { nauty-geng 4 2>/dev/null | nauty-directg -o 2>/dev/null \
+                 | /tmp/ci_incx 5 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | /tmp/ci_labsum 5; }
+    expect "labsum L_inc(5)"     "labeled=978" labsum5
     # split-stream mode: cm to stdout (7268), nullity>=3 to file (3257)
     hi7="$(mktemp)"
     cmside="$(nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null \
