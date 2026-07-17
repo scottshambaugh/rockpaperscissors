@@ -8,10 +8,12 @@ from .equilibrium import (
     equilibrium_info,
     equilibrium_vertices,
     has_fully_mixed,
+    is_completely_mixed,
     kernel_dim,
     max_entropy_equilibrium,
     maxmin_equilibrium,
     num_equilibria,
+    required_strategies,
 )
 from .generate import count_iso_classes, search_two_paradox
 from .metrics import (
@@ -33,7 +35,13 @@ from .modular import (
     tree_summary,
 )
 from .plot import CMAP, NORM, add_colorbar, best_layout, draw, equilibria_grid, grid, plot_modular
-from .search import search_balanced, search_balanced_fast, search_inclusive, search_regular
+from .search import (
+    search_balanced,
+    search_balanced_fast,
+    search_completely_mixed,
+    search_inclusive,
+    search_regular,
+)
 from .structure import (
     canonical_key,
     canonicalize,
@@ -70,6 +78,7 @@ __all__ = [
     "gini",
     "grid",
     "has_fully_mixed",
+    "is_completely_mixed",
     "is_module",
     "is_prime",
     "k_paradoxical",
@@ -94,9 +103,11 @@ __all__ = [
     "profile_of",
     "reduce_twins",
     "regular",
+    "required_strategies",
     "save",
     "search_balanced",
     "search_balanced_fast",
+    "search_completely_mixed",
     "search_inclusive",
     "search_regular",
     "search_two_paradox",

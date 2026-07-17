@@ -16,6 +16,7 @@ from rpsfair import (
     pretty,
     reduce_twins,
     search_balanced,
+    search_completely_mixed,
     search_inclusive,
     search_regular,
     search_two_paradox,
@@ -28,7 +29,7 @@ os.makedirs(PLOTS_DIR, exist_ok=True)
 
 NS = [3, 4, 5, 6]
 # inclusive equilibrium is non-uniform; balanced/regular are always uniform 1/n
-PERCENTAGES = {"regular": False, "balanced": False, "inclusive": True}
+PERCENTAGES = {"regular": False, "balanced": False, "inclusive": True, "completely_mixed": True}
 
 
 def rank(structures, sort=True):
@@ -67,8 +68,15 @@ def rank(structures, sort=True):
 
 
 def report_and_plot(
-    kind, n, structures, sort=True, optimize_layout=True,
-    twin_free_only=False, prime_only=False, ncols=4, dpi=140,
+    kind,
+    n,
+    structures,
+    sort=True,
+    optimize_layout=True,
+    twin_free_only=False,
+    prime_only=False,
+    ncols=4,
+    dpi=140,
 ):
     """Print ranking + top text grid, save the multi-panel plot.
 
@@ -92,11 +100,7 @@ def report_and_plot(
     print(f"    {n_cut} have a cut vertex (articulation point)")
     for i, r in enumerate(ranked, 1):
         core_tag = "twin-free" if r["core"] == n else f"core={r['core']}"
-        eq_tag = (
-            "eq=unique"
-            if r["nverts"] == 1
-            else f"eq={r['nverts']} vertices ({r['eqdim']}D)"
-        )
+        eq_tag = "eq=unique" if r["nverts"] == 1 else f"eq={r['nverts']} vertices ({r['eqdim']}D)"
         print(
             f"  #{i:<2d} orbits={r['orbits']} |Aut|={r['aut']} "
             f"ties={r['ties']:.2f} gini={r['gini']:.2f} cuts={r['cuts']} {core_tag} {eq_tag}"
@@ -110,7 +114,12 @@ def report_and_plot(
     def title(i, r):
         # gini varies only when the equilibrium is non-uniform (inclusive)
         # order follows the sort key: orbits, then ties, then gini
-        parts = [f"#{i + 1}", f"orbits={r['orbits']}", f"n_eq={r['nverts']}", f"ties={r['ties']:.2f}"]
+        parts = [
+            f"#{i + 1}",
+            f"orbits={r['orbits']}",
+            f"n_eq={r['nverts']}",
+            f"ties={r['ties']:.2f}",
+        ]
         if PERCENTAGES[kind]:
             parts.append(f"gini={r['gini']:.2f}")
         if r["cuts"]:
@@ -146,13 +155,14 @@ def main():
     args = ap.parse_args()
 
     # each cell shows "total(twin-free)" -- twin-free = no tie-twin duplicates
-    print("n   two-paradox      regular     balanced      inclusive")
-    print("-   -----------   ----------   ----------   ------------")
+    print("n   two-paradox      regular     balanced      inclusive   compl-mixed")
+    print("-   -----------   ----------   ----------   ------------   -----------")
     for n in NS:
         t0 = time.perf_counter()
         reg = search_regular(n)
         bal = search_balanced(n)
         inc = search_inclusive(n)
+        cm = search_completely_mixed(n)  # unique fully-mixed eq; 0 at even n
         p2 = search_two_paradox(n)  # authoritative: a filter over all tournaments
 
         def cell(structs):
@@ -162,7 +172,7 @@ def main():
         dt = time.perf_counter() - t0
         print(
             f"{n:1d}   {cell(p2):>11}   "
-            f"{cell(reg):>10}   {cell(bal):>10}   {cell(inc):>12}   ({dt:.2f}s)"
+            f"{cell(reg):>10}   {cell(bal):>10}   {cell(inc):>12}   {cell(cm):>11}   ({dt:.2f}s)"
         )
 
     for n in NS:
@@ -188,6 +198,16 @@ def main():
             sort=not args.no_rank,
             optimize_layout=not args.no_optimize_layout,
         )
+        # completely mixed ⊂ inclusive; empty at even n (parity theorem)
+        cm = search_completely_mixed(n)
+        if cm:
+            report_and_plot(
+                "completely_mixed",
+                n,
+                cm,
+                sort=not args.no_rank,
+                optimize_layout=not args.no_optimize_layout,
+            )
 
 
 if __name__ == "__main__":

@@ -106,7 +106,12 @@ def is_prime(M):
 
 def _all_modules(M):
     n = len(M)
-    return [frozenset(S) for size in range(1, n + 1) for S in combinations(range(n), size) if is_module(M, S)]
+    return [
+        frozenset(S)
+        for size in range(1, n + 1)
+        for S in combinations(range(n), size)
+        if is_module(M, S)
+    ]
 
 
 def _overlap(a, b):

@@ -7,7 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .cache import cached
-from .equilibrium import has_fully_mixed, maxmin_equilibrium
+from .equilibrium import has_fully_mixed, is_completely_mixed, maxmin_equilibrium
 from .structure import connected, matrix_hash, orbit_hashes, paradoxical_batch
 
 BATCH_SIZE = 8192
@@ -268,6 +268,32 @@ def search_inclusive(n):
         return _enumerate(n, "inclusive", predicate)
 
     return cached(f"inclusive_n{n}", go)
+
+
+def search_completely_mixed(n):
+    """Completely mixed games (Kaplansky 1945): EVERY Nash equilibrium is fully
+    mixed -- equivalently, the equilibrium is unique and fully mixed, so every
+    strategy is *required* (played in every equilibrium), not merely playable.
+
+    This is the strict top of the equilibrium axis: completely-mixed ⊂ inclusive.
+    It is NOT comparable with balanced/regular the way those are with each other:
+    a balanced or regular game at even n is never completely mixed (rank(M) is
+    even, so even n forces a continuum of equilibria -- Kaplansky's parity
+    observation), hence the immediate [] below; at odd n regular games can still
+    fail (e.g. two of the twelve twin-free regular n=7 games have 4 extreme
+    equilibria each).
+
+    Implemented as a filter over `search_inclusive` (the unique equilibrium of a
+    completely mixed game is fully mixed, so every completely mixed game is
+    inclusive), with the cheap nullity-1 + one-signed-kernel test gating
+    membership. The stored xs (leximin) is the unique equilibrium itself. No
+    separate cache: the inclusive cache does the heavy lifting. Completely mixed
+    implies twin-free automatically (a tie-twin pair i, j puts e_i - e_j in
+    ker(M), breaking nullity 1).
+    """
+    if n % 2 == 0:
+        return []
+    return [(M, xs) for M, xs in search_inclusive(n) if is_completely_mixed(M)]
 
 
 def search_balanced_fast(n):

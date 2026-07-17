@@ -13,12 +13,15 @@ from rpsfair import (
     canonical_key,
     connected,
     has_fully_mixed,
+    is_completely_mixed,
     k_paradoxical,
+    num_equilibria,
     paradoxical,
     profile_of,
     regular,
     search_balanced,
     search_balanced_fast,
+    search_completely_mixed,
     search_inclusive,
     search_regular,
     twin_free,
@@ -28,6 +31,9 @@ from rpsfair import (
 REGULAR = {3: (1, 1), 4: (1, 1), 5: (2, 2), 6: (5, 4), 7: (13, 12), 8: (82, 76)}
 BALANCED = {3: (1, 1), 4: (1, 1), 5: (4, 3), 6: (16, 13), 7: (175, 152)}
 INCLUSIVE = {3: (1, 1), 4: (3, 2), 5: (15, 8), 6: (222, 177)}
+# completely mixed (Kaplansky): every equilibrium fully mixed = unique + fully
+# mixed. Zero at every even n (parity theorem); twin-free always equals total.
+COMPLETELY_MIXED = {3: 1, 4: 0, 5: 7, 6: 0}
 
 
 def counts(structs):
@@ -56,6 +62,32 @@ def test_inclusive_counts(n):
     assert counts(search_inclusive(n)) == INCLUSIVE[n]
 
 
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_completely_mixed_counts(n):
+    assert len(search_completely_mixed(n)) == COMPLETELY_MIXED[n]
+
+
+def test_completely_mixed_even_n_is_empty_without_search():
+    # Kaplansky parity: an even-order skew-symmetric game is never completely
+    # mixed, so even n short-circuits (n=100 would be unenumerable otherwise)
+    assert search_completely_mixed(100) == []
+
+
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_completely_mixed_is_unique_equilibrium(n):
+    # the cheap nullity-1 + one-signed-kernel test agrees with the independent
+    # vertex enumeration: completely mixed <=> exactly one extreme equilibrium
+    for M, _ in search_inclusive(n):
+        assert is_completely_mixed(M) == (num_equilibria(M) == 1)
+
+
+@pytest.mark.parametrize("n", [3, 5])
+def test_completely_mixed_is_twin_free(n):
+    # a tie-twin pair puts e_i - e_j in ker(M), so twins break nullity 1
+    for M, _ in search_completely_mixed(n):
+        assert twin_free(M)
+
+
 def test_two_paradox_first_appears_at_n7():
     # the smallest two-paradox (P2) game is the n=7 Paley tournament: exactly one
     for n in [3, 4, 5, 6]:
@@ -77,6 +109,11 @@ def test_balanced_count_n7():
 @pytest.mark.slow
 def test_inclusive_count_n6():
     assert counts(search_inclusive(6)) == INCLUSIVE[6]
+
+
+@pytest.mark.slow
+def test_completely_mixed_count_n6():
+    assert len(search_completely_mixed(6)) == COMPLETELY_MIXED[6]
 
 
 # ---------------- structural invariants of returned games ----------------

@@ -27,8 +27,18 @@ _ISO_COUNTS = {1: 1, 2: 2, 3: 7, 4: 42, 5: 582, 6: 21480}
 # canonical augmentation has no cheap a-priori count of its own work, but the number
 # of *kept* games climbs monotonically toward these, which is a usable progress
 # signal. A308239 (balanced); inclusive is this project's own census.
-_BALANCED_COUNTS = {3: 1, 4: 1, 5: 4, 6: 16, 7: 175, 8: 5274, 9: 434017,
-                    10: 90658149, 11: 48825116761, 12: 68579602126387}
+_BALANCED_COUNTS = {
+    3: 1,
+    4: 1,
+    5: 4,
+    6: 16,
+    7: 175,
+    8: 5274,
+    9: 434017,
+    10: 90658149,
+    11: 48825116761,
+    12: 68579602126387,
+}
 _INCLUSIVE_COUNTS = {3: 1, 4: 3, 5: 15, 6: 222, 7: 10525, 8: 1198013}
 
 
@@ -231,6 +241,7 @@ def _generate_balanced(n):
     profiling showed was the dominant cost (numpy dispatch overhead on tiny arrays,
     paid billions of times). Parent row sums are computed once per parent.
     """
+
     def rec(k):
         if k <= 1:
             yield np.zeros((1, 1), dtype=np.int8)
@@ -275,8 +286,7 @@ def search_balanced_gen(n):
         # cheap a-priori work estimate, but kept games climb toward this, so the bar
         # shows a true % / ETA. tqdm writes to stderr -- a run harness that wants the
         # bar must NOT send stderr to /dev/null.
-        bar = tqdm(total=_BALANCED_COUNTS.get(n), desc=f"balanced n={n}",
-                   unit="game", leave=False)
+        bar = tqdm(total=_BALANCED_COUNTS.get(n), desc=f"balanced n={n}", unit="game", leave=False)
         for M in _generate_balanced(n):  # leaves already have all row sums == 0
             if paradoxical(M) and connected(M):
                 out.append((M.copy(), uniform))
@@ -339,8 +349,11 @@ def search_inclusive_gen(n):
 
     def go():
         if n <= 2:
-            return [(M, maxmin_equilibrium(M)) for M in generate_up_to_iso(n)
-                    if paradoxical(M) and connected(M) and has_fully_mixed(M)[0]]
+            return [
+                (M, maxmin_equilibrium(M))
+                for M in generate_up_to_iso(n)
+                if paradoxical(M) and connected(M) and has_fully_mixed(M)[0]
+            ]
         # all new-node vectors that could be paradoxical (need a win and a loss)
         allv = np.array(
             [t for t in product((-1, 0, 1), repeat=n - 1) if 1 in t and -1 in t], dtype=np.int8
@@ -348,8 +361,11 @@ def search_inclusive_gen(n):
         B = len(allv)
         seen, out = set(), []
         bar = tqdm(
-            generate_up_to_iso(n - 1), total=_ISO_COUNTS.get(n - 1),
-            desc=f"inclusive n={n}", unit="cls", leave=False,
+            generate_up_to_iso(n - 1),
+            total=_ISO_COUNTS.get(n - 1),
+            desc=f"inclusive n={n}",
+            unit="cls",
+            leave=False,
         )
         for Y in bar:
             bar.set_postfix_str(f"{len(out)}/{_INCLUSIVE_COUNTS.get(n, '?')} found")
@@ -399,8 +415,13 @@ def search_two_paradox(n):
 
     def go():
         out = []
-        bar = tqdm(generate_tournaments(n), total=_TOURNAMENT_COUNTS.get(n),
-                   desc=f"two-paradox n={n}", unit="cls", leave=False)
+        bar = tqdm(
+            generate_tournaments(n),
+            total=_TOURNAMENT_COUNTS.get(n),
+            desc=f"two-paradox n={n}",
+            unit="cls",
+            leave=False,
+        )
         for M in bar:
             if k_paradoxical(M, 2) and paradoxical(M) and connected(M):
                 out.append((M.copy(), maxmin_equilibrium(M)))

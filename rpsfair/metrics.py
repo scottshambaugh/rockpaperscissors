@@ -1,6 +1,5 @@
 """Structural metrics on fair RPS games."""
 
-
 import networkx as nx
 import numpy as np
 import pynauty

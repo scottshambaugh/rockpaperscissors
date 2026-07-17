@@ -93,6 +93,56 @@ def has_fully_mixed(M, tol=1e-8):
     return False, None
 
 
+def is_completely_mixed(M, tol=1e-8):
+    """Whether EVERY Nash equilibrium is fully mixed (a *completely mixed game*).
+
+    Kaplansky (1945) named these: a matrix game is *completely mixed* when every
+    optimal strategy (of both players) is completely mixed, and proved this forces
+    the optimal strategy to be UNIQUE. For skew-symmetric games it also forces odd
+    n (the parity theorem: rank is even, so at even n a fully-mixed equilibrium
+    always sits in a continuum and the continuum's boundary points are equilibria
+    that drop a strategy). Kaplansky (1995) characterised the skew-symmetric case
+    via principal Pfaffians; operationally the test is just:
+
+        dim ker(M) = 1  and  the kernel vector is strictly one-signed.
+
+    That this implies "every equilibrium is fully mixed" (not merely "a fully-mixed
+    equilibrium exists") is a two-line argument: let p > 0 span ker(M) and let q be
+    any symmetric equilibrium (M q <= 0). Then pᵀ(M q) = -(M p)ᵀq = 0, and a
+    positive combination of non-positive terms vanishes only if all do, so
+    M q = 0 and q ∈ ker(M) = span(p), i.e. q = p. Conversely nullity >= 2 gives a
+    fully-mixed *family* whose closure hits the simplex boundary in equilibria of
+    partial support. So completely mixed <=> inclusive with a unique equilibrium,
+    the strict top of the equilibrium-fairness ladder: every strategy is not just
+    *playable* (inclusive) but *required* -- played in every equilibrium.
+    """
+    _, S, Vt = np.linalg.svd(np.asarray(M, dtype=float))
+    null = Vt[tol * max(S[0], 1.0) > S]
+    if len(null) != 1:
+        return False
+    v = null[0]
+    return bool((v > tol).all() or (v < -tol).all())
+
+
+def required_strategies(M, tol=1e-7):
+    """Indices of strategies played in EVERY equilibrium (positive at every vertex of O).
+
+    The complement of the "droppable" moves: strategy i is required iff
+    min_{p in O} p_i > 0, and the minimum of a linear function over the polytope O
+    is attained at a vertex, so we just scan the extreme equilibria. Contrast with
+    the *essential* strategies (played in at least one equilibrium, the union of
+    vertex supports): inclusive means every strategy is essential, completely mixed
+    means every strategy is required. E.g. the 5-move elemental game (twins of the
+    cop game) is inclusive, but Fire and Water are capped and only Grass+Clay's
+    *combined* weight is bounded below -- its required set is a proper subset.
+    """
+    V = equilibrium_vertices(M, tol)
+    if not V:
+        return []
+    P = np.array(V)
+    return [i for i in range(len(M)) if (P[:, i] > tol).all()]
+
+
 def maxmin_equilibrium(M, tol=1e-7):
     """Canonical equilibrium: the leximin point of O = {p simplex : A p <= 0}.
 
@@ -163,7 +213,9 @@ def maxmin_equilibrium(M, tol=1e-7):
         for k in free:
             if k != j:
                 bounds[k] = (lo, 1.0)
-        return linprog(c, A_ub=M, b_ub=np.zeros(n), A_eq=a_eq, b_eq=b_eq, bounds=bounds, method="highs")
+        return linprog(
+            c, A_ub=M, b_ub=np.zeros(n), A_eq=a_eq, b_eq=b_eq, bounds=bounds, method="highs"
+        )
 
     free = list(range(n))
     while free:

@@ -18,6 +18,9 @@ LINK="/tmp/ci_bshim.o -L/usr/local/lib -lnauty"  # -L covers a source-built libn
 gcc -O2 -c rust/balanced_shim.c -I"$NAUTY_INC" -o /tmp/ci_bshim.o
 rustc -O rust/balanced.rs -o /tmp/ci_balanced -C link-args="$LINK"
 rustc -O rust/regular.rs  -o /tmp/ci_regular  -C link-args="$LINK"
+rustc -O rust/cm_filter.rs -o /tmp/ci_cmf
+rustc -O rust/factorcrit.rs -o /tmp/ci_fc
+rustc -O rust/cm_extend.rs -o /tmp/ci_cmx
 
 fail=0
 expect () {  # $1 label, $2 expected substring, $3.. command
@@ -40,6 +43,31 @@ expect "regular n=6"  "total=5 twin_free=4 prime=4"          /tmp/ci_regular  6 
 expect "regular n=7"  "total=13 twin_free=12 prime=12"       /tmp/ci_regular  7 4 1 0
 expect "regular n=8"  "total=82 twin_free=76 prime=76"       /tmp/ci_regular  8 5 1 0
 expect "regular n=9"  "total=2016 twin_free=1973 prime=1972" /tmp/ci_regular  9 5 1 0
+# completely mixed (Kaplansky): Pfaffian-cofactor filter over nauty-directg.
+# n=5/n=7 anchor to the Python census; candidates anchor to A001174. The
+# factor-critical prefilter (fc, used by the big n=9 run) must lose no CM game.
+if command -v nauty-geng >/dev/null && command -v nauty-directg >/dev/null; then
+  cmf ()  { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/ci_cmf "$1"; }
+  cmff () { nauty-geng "$1" 2>/dev/null | /tmp/ci_fc "$1" 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/ci_cmf "$1"; }
+  expect "compl-mixed n=5"          "candidates=582 completely_mixed=7"        cmf  5
+  expect "compl-mixed n=7"          "candidates=2142288 completely_mixed=7268" cmf  7
+  expect "compl-mixed n=5 +fc"      "completely_mixed=7"                       cmff 5
+  expect "compl-mixed n=7 +fc"      "completely_mixed=7268"                    cmff 7  # fc lossless
+  # extension method (cm_extend): build n-vertex CM games from (n-1)-vertex
+  # parents, canonicalize + dedup. An INDEPENDENT algorithm from the cm_filter
+  # scan above -- agreement on 7 / 7268 cross-validates both. Needs labelg.
+  if command -v nauty-labelg >/dev/null; then
+    cmx () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null \
+             | /tmp/ci_cmx "$2" 2>/dev/null | nauty-labelg 2>/dev/null | sort -u | wc -l; }
+    expect "cm-extend n=5 (from 4)"  "7"    cmx 4 5
+    expect "cm-extend n=7 (from 6)"  "7268" cmx 6 7
+  else
+    echo "skip cm-extend checks (nauty-labelg not on PATH)"
+  fi
+else
+  echo "skip completely-mixed checks (nauty-geng/nauty-directg not on PATH)"
+fi
+
 # sharding must partition: 3 shards of balanced n=7 sum to the whole
 s0=$(/tmp/ci_balanced 7 5 3 0 2>/dev/null); s1=$(/tmp/ci_balanced 7 5 3 1 2>/dev/null); s2=$(/tmp/ci_balanced 7 5 3 2 2>/dev/null)
 tot=$(printf '%s\n%s\n%s\n' "$s0" "$s1" "$s2" | awk '{for(i=1;i<=NF;i++)if($i~/^total=/){split($i,a,"=");t+=a[2]}}END{print t}')

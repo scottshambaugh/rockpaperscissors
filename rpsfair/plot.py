@@ -303,8 +303,17 @@ def _modular_layout(M, R=_MOD_R, gap=0.30):
     return pos, boxes, qedges, (0.0, 0.0), rad + 0.12
 
 
-def plot_modular(M, xs=None, ax=None, node_labels=None, title=None, path=None, dpi=140,
-                 view_half=None, view_center=None):
+def plot_modular(
+    M,
+    xs=None,
+    ax=None,
+    node_labels=None,
+    title=None,
+    path=None,
+    dpi=140,
+    view_half=None,
+    view_center=None,
+):
     """Draw a game with nodes laid out by their modular decomposition.
 
     Each module is a cluster; nested modules are nested translucent disks colored by
@@ -338,12 +347,21 @@ def plot_modular(M, xs=None, ax=None, node_labels=None, title=None, path=None, d
     for cen, radius, typ, label in sorted(boxes, key=lambda b: -b[1]):  # largest disk first
         col = _MODBOX.get(typ, "#999999")
         ax.add_patch(
-            Circle(cen, radius, facecolor=col, alpha=0.15, edgecolor=col, lw=1.6, ls="--", zorder=0.5)
+            Circle(
+                cen, radius, facecolor=col, alpha=0.15, edgecolor=col, lw=1.6, ls="--", zorder=0.5
+            )
         )
         if label:
             ax.text(
-                cen[0] - 0.71 * radius, cen[1] + 0.71 * radius, label,
-                ha="center", va="center", fontsize=8.5, color=col, fontweight="bold", zorder=0.6,
+                cen[0] - 0.71 * radius,
+                cen[1] + 0.71 * radius,
+                label,
+                ha="center",
+                va="center",
+                fontsize=8.5,
+                color=col,
+                fontweight="bold",
+                zorder=0.6,
             )
 
     for ca, ra, cb, rb, sign in qedges:  # one edge per sibling-module pair
@@ -358,7 +376,9 @@ def plot_modular(M, xs=None, ax=None, node_labels=None, title=None, path=None, d
         else:
             src, dst = (s0, e0) if sign == 1 else (e0, s0)
             ax.add_patch(
-                FancyArrowPatch(src, dst, arrowstyle="-|>", mutation_scale=13, color=WIN, lw=1.5, zorder=2)
+                FancyArrowPatch(
+                    src, dst, arrowstyle="-|>", mutation_scale=13, color=WIN, lw=1.5, zorder=2
+                )
             )
 
     # WTL profile + play rate, rendered exactly as draw() (radius R, font 9, same offsets)
@@ -369,8 +389,28 @@ def plot_modular(M, xs=None, ax=None, node_labels=None, title=None, path=None, d
         tc = "white" if _luminance(fill) < 0.5 else "black"
         ax.add_patch(Circle((x, y), R, facecolor=fill, edgecolor="black", lw=1.3, zorder=3))
         lab = node_labels[i] if node_labels else "{}·{}·{}".format(*profiles[i])
-        ax.text(x, y + 0.05, lab, ha="center", va="center", fontsize=9, fontweight="bold", color=tc, zorder=4)
-        ax.text(x, y - 0.08, f"{xs[i] * 100:.0f}%", ha="center", va="center", fontsize=9, fontweight="bold", color=tc, zorder=4)
+        ax.text(
+            x,
+            y + 0.05,
+            lab,
+            ha="center",
+            va="center",
+            fontsize=9,
+            fontweight="bold",
+            color=tc,
+            zorder=4,
+        )
+        ax.text(
+            x,
+            y - 0.08,
+            f"{xs[i] * 100:.0f}%",
+            ha="center",
+            va="center",
+            fontsize=9,
+            fontweight="bold",
+            color=tc,
+            zorder=4,
+        )
     if title:
         ax.set_title(title, fontsize=11, pad=6)
     ax.set_xlim(view_center[0] - view_half, view_center[0] + view_half)

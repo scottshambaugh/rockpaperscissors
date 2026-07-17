@@ -77,3 +77,90 @@ Validated against `search_regular` on every stratum through n=11 (e.g. n=11 d=4 
 `|Aut(G)|`, so it OOMs on complete graphs Kₙ (|Aut|=n!) — fine for n=12's strata
 (max |Aut| ≈ 82,944 at K(4,4,4)) but the odd-n top stratum Kₙ must use A096368.
 
+
+## Completely mixed games — `cm_filter.rs`
+
+Counts the **completely mixed** games (Kaplansky: every Nash equilibrium fully
+mixed) at odd `n` by filtering `nauty-geng -c -d2 | nauty-directg -o` (both geng
+restrictions are implied by complete mixedness, so nothing is lost). The test is
+exact integer arithmetic, no LP and no floats: for odd skew-symmetric `M` the
+vector `v_i = (−1)^i Pf(M₋ᵢ)` of principal-minor Pfaffians satisfies `Mv = 0`
+identically, and the game is completely mixed iff all `n` Pfaffians are nonzero
+with alternating signs (Kaplansky 1995). Positivity of `v` subsumes paradox,
+connectivity, fully-mixed existence and uniqueness in one check; Pfaffians are
+computed recursively (closed-form 4×4 base case) with early exit on the first
+zero or sign clash — ~4M candidates/s/core at n=9.
+
+```sh
+rustc -O cm_filter.rs -o /tmp/cmf
+nauty-geng 7 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/cmf 7   # 7268
+```
+
+**Factor-critical prefilter (`factorcrit.rs`).** A completely mixed game needs all
+`n` principal Pfaffians `Pf(M−i)` nonzero, and a skew Pfaffian is a signed sum over
+the perfect matchings of its support graph — so `Pf(M−i) ≠ 0` forces `G−i` to have
+a perfect matching. Needing that for every `i` is exactly `G` being **factor-critical**
+(which also implies connected and min-degree ≥ 2). `factorcrit.rs` filters the
+`graph6` stream to factor-critical graphs *before* directg's `2^edges` orientation
+blow-up — lossless (re-verified: `n=7` still `7268`). Honest caveat: it only trims
+the sparse tail (~10% of candidates), because the orientation count is dominated by
+dense graphs, nearly all of which are factor-critical. CM's real selectivity is the
+*global* one-signed-kernel condition, which no local graph property captures — so
+there is no large generation-side prune, and n=9 stays a ~`4×10¹¹` enumeration made
+feasible only by the cheap exact filter.
+
+```sh
+rustc -O factorcrit.rs -o /tmp/fc
+nauty-geng 9 2>/dev/null | /tmp/fc 9 | nauty-directg -o 2>/dev/null | /tmp/cmf 9
+```
+
+Anchors: `n = 3, 5, 7` → `1, 7, 7268` (matches the Python `search_completely_mixed`
+census), `n=8` → `0` (the parity theorem — doubles as a sign-logic check) with
+candidate total `575016219 = A001174(8)` as the completeness checksum. For `n=9`,
+shard geng (`res/32`) and sum; the restricted candidate total plus the complement
+(`comm -23 <(nauty-geng 9 | sort) <(nauty-geng 9 -c -d2 | sort) | nauty-directg -o -u`)
+must reproduce `A001174(9) = 415939243032`.
+
+## Completely mixed games, the fast way — `cm_extend.rs` (the extension method)
+
+`cm_filter.rs` still has to look at every one of the `~4×10¹¹` oriented 9-graphs.
+`cm_extend.rs` avoids that by **building** the completely mixed games from the
+`A001174(8) = 575016219` eight-vertex parents instead of filtering the nine-vertex
+children. The lemma: delete a vertex from a CM game `M` and the remaining `8×8`
+skew `M'` is **nonsingular** (`Pf(M')≠0`); conversely, for *any* nonsingular `M'`
+and *any* new-vertex vector `r ∈ {−1,0,1}⁸`, the extended matrix has nullity
+**exactly 1** with kernel `v = (−M'⁻¹r, 1)` — the row equation `rᵀv'=0` holds
+automatically because `rᵀM'⁻¹r = 0` for skew `M'`. Hence
+
+    M is completely mixed  ⇔  −M'⁻¹ r > 0 componentwise,
+
+and that single strict-positivity condition already forces paradoxical + connected
+(a zero or sign-flipped coordinate is exactly a dropped strategy or a disconnecting
+even block). So we never construct a non-CM 9-graph.
+
+Pipeline: `nauty-geng 8 | nauty-directg -o | cm_extend 9 | nauty-labelg | sort -u | wc -l`
+(directg emits the 8-vertex parents; `cm_extend` emits every CM child as digraph6;
+`labelg` canonicalises; `sort -u` counts iso classes). Performance came from
+tackling bottlenecks in turn:
+
+- **Dedup ~9× → 1.03×.** Each CM game is generated once per deletion-parent (all `n`
+  deletions are nonsingular). A *canonical-deletion prefilter* emits a child only
+  when its added vertex is maximal under a cheap degree-refinement signature —
+  sound (some vertex is always maximal, so no class is lost), and the residual
+  ties are mopped up by `sort -u`.
+- **r-scan `3⁸` → tiny.** A bound-pruned DFS over `r` (track the partial `M'⁻¹r`,
+  cut a branch once a coordinate's best case can't reach `<0`) with columns ordered
+  by descending magnitude and in-place backtracking. Worst-case slice `103s → 3.3s`.
+- **inverse.** Reciprocal-multiply instead of per-pivot divisions; skip
+  already-reduced columns.
+
+After that, `directg` generation is the bottleneck (~5 min single-thread, shards
+`res/N` across cores). Validated to reproduce `n=5 → 7` and `n=7 → 7268` — an
+*independent* algorithm from `cm_filter.rs`, so agreement cross-checks both
+(`rust/ci_test.sh`).
+
+```sh
+rustc -O cm_extend.rs -o /tmp/cmx
+nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/cmx 7 \
+  | nauty-labelg 2>/dev/null | sort -u | wc -l          # 7268
+```
