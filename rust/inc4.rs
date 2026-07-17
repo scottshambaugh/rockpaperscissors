@@ -29,84 +29,15 @@ use std::io::{self, Read};
 use std::os::raw::c_int;
 
 mod common;
-use common::{cone_has_nonneg, kernel_basis_exact};
+use common::{adjugate_ff, cone_has_nonneg, factorial, gcd_i128, kernel_basis_exact, lcm_to, paradox_connected_beats};
 
 extern "C" {
     fn rps_autsize(arc: *const u64, n: c_int) -> f64;
 }
 
-fn factorial(n: u64) -> u128 {
-    (1..=n as u128).product::<u128>().max(1)
-}
-
-fn lcm_to(n: u64) -> u128 {
-    fn gcd(a: u64, b: u64) -> u64 {
-        if b == 0 { a } else { gcd(b, a % b) }
-    }
-    (1..=n).fold(1u64, |l, x| l / gcd(l, x) * x) as u128
-}
-
-fn gcd128(a: i128, b: i128) -> i128 {
-    if b == 0 { a } else { gcd128(b, a % b) }
-}
-
-// fraction-free Gauss-Jordan adjugate for m <= 12 (i128; bordered matrices)
+// bordered matrices here are always nonsingular; verify stays on (per-parent)
 fn adjugate12(b0: &[[i128; 12]; 12], m: usize) -> ([[i128; 12]; 12], i128) {
-    let mut a = *b0;
-    let mut aug = [[0i128; 12]; 12];
-    for i in 0..m {
-        aug[i][i] = 1;
-    }
-    let mut denom: i128 = 1;
-    let mut sign: i128 = 1;
-    for k in 0..m {
-        if a[k][k] == 0 {
-            let mut piv = usize::MAX;
-            for r in (k + 1)..m {
-                if a[r][k] != 0 {
-                    piv = r;
-                    break;
-                }
-            }
-            assert!(piv != usize::MAX, "bordered singular");
-            a.swap(k, piv);
-            aug.swap(k, piv);
-            sign = -sign;
-        }
-        let pk = a[k][k];
-        for r in 0..m {
-            if r == k {
-                continue;
-            }
-            let f = a[r][k];
-            for c in 0..m {
-                if c >= k {
-                    a[r][c] = (a[r][c] * pk - f * a[k][c]) / denom;
-                }
-                aug[r][c] = (aug[r][c] * pk - f * aug[k][c]) / denom;
-            }
-            a[r][k] = 0;
-        }
-        denom = pk;
-    }
-    let det = sign * a[m - 1][m - 1];
-    let mut adj = [[0i128; 12]; 12];
-    for i in 0..m {
-        for j in 0..m {
-            adj[i][j] = sign * aug[i][j];
-        }
-    }
-    // verify B*adj = det*I (cheap relative to the DFS)
-    for i in 0..m {
-        for j in 0..m {
-            let mut s = 0i128;
-            for k in 0..m {
-                s += b0[i][k] * adj[k][j];
-            }
-            assert!(s == if i == j { det } else { 0 }, "adjugate verify failed");
-        }
-    }
-    (adj, det)
+    adjugate_ff(b0, m, true).expect("bordered singular")
 }
 
 // positive dependencies (support <= d+1) of the p fixed d-columns of B:
@@ -422,7 +353,7 @@ fn main() {
                     }
                 }
                 cb[p] = nr;
-                if !paradox_connected(&cb, n) {
+                if !paradox_connected_beats(&cb, n) {
                     continue;
                 }
                 // w numerators: wnum[i] = -(sgn * ADJ_i . r); w_i = wnum[i]/|det|
@@ -498,7 +429,7 @@ fn slice_has_nonneg(e: &[i128; 4], basis: &[[i64; 16]], wnum: &[i128; 10], absd:
         let mut v = [0i128; 4];
         v[k] = e[j];
         v[j] = -e[k];
-        let g = gcd128(v.iter().map(|x| x.abs()).fold(0, gcd128), 0).max(1);
+        let g = gcd_i128(v.iter().map(|x| x.abs()).fold(0, gcd_i128), 0).max(1);
         for x in v.iter_mut() {
             *x /= g;
         }
@@ -556,34 +487,3 @@ fn clampdown(x: i128) -> i64 {
     x as i64
 }
 
-fn paradox_connected(beats: &[u16; 16], n: usize) -> bool {
-    let full: u16 = ((1u32 << n) - 1) as u16;
-    let mut inn = [0u16; 16];
-    for i in 0..n {
-        let mut w = beats[i];
-        while w != 0 {
-            let j = w.trailing_zeros() as usize;
-            w &= w - 1;
-            inn[j] |= 1 << i;
-        }
-    }
-    for i in 0..n {
-        if beats[i] == 0 || inn[i] == 0 {
-            return false;
-        }
-    }
-    let mut seen = 1u16;
-    let mut fr = 1u16;
-    while fr != 0 {
-        let mut nf = 0u16;
-        let mut f = fr;
-        while f != 0 {
-            let v = f.trailing_zeros() as usize;
-            f &= f - 1;
-            nf |= (beats[v] | inn[v]) & !seen;
-        }
-        seen |= nf;
-        fr = nf;
-    }
-    seen == full
-}

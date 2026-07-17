@@ -101,6 +101,11 @@ Integrate the two-sided rule into `inc10.rs`:
    already covers 2T₁ ≤ 2n.
 3. Add the mid-DFS degree-domination prune for Z(v) ≠ ∅ parents (partial
    (od,id) of new and each Z-vertex are linear in r; suffix bounds sound).
+   [DONE: prune on cap = nod + remaining vs each Z-vertex's minimum child
+   out-degree, with an od-tie in-degree refinement and a cap ≤ zmaxpod+1 gate
+   that skips the loop where nothing can fire. Kills 29% of surviving leaves
+   at n=8 (4.31M → 3.07M) and 59% of walked leaves on the dense n=10 band;
+   anchors and accepted counts unchanged.]
 4. Fix paradox-forced coordinates before the DFS.
 5. Re-run the full anchor ladder (126,900 / 45,897,886,776) — mandatory.
 

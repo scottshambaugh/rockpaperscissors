@@ -39,121 +39,7 @@ static mut NODES: u64 = 0;
 static mut CONE_LEAVES: u64 = 0;
 static mut SIG_CALLS: u64 = 0;
 
-fn factorial(n: u64) -> u128 {
-    (1..=n as u128).product::<u128>().max(1)
-}
-
-fn lcm_to(n: u64) -> u128 {
-    fn gcd(a: u64, b: u64) -> u64 {
-        if b == 0 { a } else { gcd(b, a % b) }
-    }
-    (1..=n).fold(1u64, |l, x| l / gcd(l, x) * x) as u128
-}
-
-// integer adjugate + det of a g x g {-1,0,1} skew matrix, g <= 8, via
-// fraction-free Gauss-Jordan (entries are minors: |adj| <= 907, |det| <= 4096)
-fn adjugate8(m: &[[i64; 8]; 8], g: usize) -> Option<([[i64; 8]; 8], i64)> {
-    let mut a = [[0i128; 8]; 8];
-    let mut aug = [[0i128; 8]; 8];
-    for i in 0..g {
-        for j in 0..g {
-            a[i][j] = m[i][j] as i128;
-        }
-        aug[i][i] = 1;
-    }
-    let mut denom: i128 = 1;
-    let mut sign: i128 = 1;
-    for k in 0..g {
-        if a[k][k] == 0 {
-            let mut piv = usize::MAX;
-            for r in (k + 1)..g {
-                if a[r][k] != 0 {
-                    piv = r;
-                    break;
-                }
-            }
-            match piv {
-                usize::MAX => return None, // singular
-                _ => {
-                    a.swap(k, piv);
-                    aug.swap(k, piv);
-                    sign = -sign;
-                }
-            }
-        }
-        let pk = a[k][k];
-        for r in 0..g {
-            if r == k {
-                continue;
-            }
-            let f = a[r][k];
-            for c in 0..g {
-                if c >= k {
-                    a[r][c] = (a[r][c] * pk - f * a[k][c]) / denom;
-                }
-                aug[r][c] = (aug[r][c] * pk - f * aug[k][c]) / denom;
-            }
-            a[r][k] = 0;
-        }
-        denom = pk;
-    }
-    let det = (sign * a[g - 1][g - 1]) as i64;
-    let mut adj = [[0i64; 8]; 8];
-    for i in 0..g {
-        for j in 0..g {
-            let v = sign * aug[i][j];
-            debug_assert!(v.abs() < (1 << 40));
-            adj[i][j] = v as i64;
-        }
-    }
-    Some((adj, det))
-}
-
-// vertex signature inside an n-vertex beats-bitmask game: (od, id, sorted out-
-// neighbour (od,id) desc, sorted in-neighbour (od,id) desc), packed comparable.
-fn vertex_sigs(beats: &[u16; 16], n: usize, sig: &mut [u64; 16]) {
-    let mut od = [0u8; 16];
-    let mut id = [0u8; 16];
-    for v in 0..n {
-        od[v] = beats[v].count_ones() as u8;
-    }
-    for v in 0..n {
-        let mut c = 0u8;
-        for u in 0..n {
-            if beats[u] & (1 << v) != 0 {
-                c += 1;
-            }
-        }
-        id[v] = c;
-    }
-    for v in 0..n {
-        // pack (od,id) then a sorted neighbour digest (order-invariant hash:
-        // sum and sum-of-squares of neighbour (od,id) codes, separated for
-        // out and in) -- an iso-invariant; collisions only weaken the
-        // rigidity certificate (fall back to canon), never correctness.
-        let mut so = 0u32;
-        let mut sq = 0u32;
-        let mut si = 0u32;
-        let mut sqi = 0u32;
-        for u in 0..n {
-            let du = ((od[u] as u32) << 5) | id[u] as u32;
-            if beats[v] & (1 << u) != 0 {
-                so += du;
-                sq += du * du;
-            }
-            if beats[u] & (1 << v) != 0 {
-                si += du;
-                sqi += du * du;
-            }
-        }
-        sig[v] = ((od[v] as u64) << 56)
-            | ((id[v] as u64) << 48)
-            | ((so as u64 & 0xFFF) << 36)
-            | ((sq as u64 & 0xFFF) << 24)
-            | ((si as u64 & 0xFFF) << 12)
-            | (sqi as u64 & 0xFFF);
-    }
-}
+use common::{adjugate_ff, connected_beats, factorial, lcm_to, vertex_sigs};
 
 // child-extension DFS state sizes: eq row + up to 8 strict rows + 9 tracking
 const MAXR: usize = 20;
@@ -170,6 +56,8 @@ fn child_dfs(
     asum: &[[i32; 11]; MAXR],
     fplus: u16,
     fminus: u16,
+    nod: u8,
+    nid: u8,
     ctx: &mut LeafCtx,
 ) {
     // row 0: equality (v . r = 0); rows 1..1+nstrict: strictly negative
@@ -184,6 +72,34 @@ fn child_dfs(
     if k == p {
         leaf(ctx, s, r);
         return;
+    }
+    if nstrict != 0 {
+        // degree-domination prune: acceptance needs the new vertex to be the
+        // (od,id)-lex argmax over Z(v) u {new} in the child. Its od can reach
+        // at most nod + remaining; each Z-vertex's od is bounded below by its
+        // parent od (+1 if its already-set coordinate is +1). If some Z-vertex
+        // wins in every completion, no leaf below can be accepted.
+        let cap = nod + (p - k) as u8;
+        if cap < ctx.zmaxpod {
+            return;
+        }
+        // per-vertex codmin <= zpod+1 <= zmaxpod+1, so when cap exceeds that
+        // no prune or od-tie can fire and the loop is pure overhead
+        if cap <= ctx.zmaxpod + 1 {
+        for t in 0..nstrict {
+            let posz = ctx.zpos[t] as usize;
+            let (czp, czm) = if posz < k {
+                let rv = r[posz];
+                ((rv > 0) as u8, (rv < 0) as u8)
+            } else {
+                (0u8, 1u8) // od-tie scenario forces all remaining to -1
+            };
+            let codmin = ctx.zpod[t] + czp;
+            if cap < codmin || (cap == codmin && nid < ctx.zpid[t] + czm) {
+                return;
+            }
+        }
+        }
     }
     unsafe { NODES += 1; }
     if k + 1 == p {
@@ -271,7 +187,7 @@ fn child_dfs(
                     s[i] += val * rows[i][k];
                 }
             }
-            child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, 0, 0, ctx);
+            child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, 0, 0, nod + (val < 0) as u8, nid + (val > 0) as u8, ctx);
             if val != 0 {
                 for i in 0..nl {
                     s[i] -= val * rows[i][k];
@@ -294,7 +210,7 @@ fn child_dfs(
                 s[i] += val * rows[i][k];
             }
         }
-        child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, fplus, fminus, ctx);
+        child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, fplus, fminus, nod + (val < 0) as u8, nid + (val > 0) as u8, ctx);
         if val != 0 {
             for i in 0..nl {
                 s[i] -= val * rows[i][k];
@@ -318,6 +234,11 @@ struct LeafCtx {
     // parent degrees (child degrees = these + r contribution)
     pod: [u8; 16],
     pid: [u8; 16],
+    // Z(v) data in DFS-ordered coordinates, for the mid-DFS domination prune
+    zpos: [u8; 8],
+    zpod: [u8; 8],
+    zpid: [u8; 8],
+    zmaxpod: u8,
     sum: u128,
     leaves: u64,
     accepted: u64,
@@ -349,7 +270,7 @@ fn leaf(ctx: &mut LeafCtx, _s: &[i32; MAXR], r: &[i32; 10]) {
             }
         }
         beats[p] = minus;
-        if !connected_mask(&beats, p + 1) {
+        if !connected_beats(&beats, p + 1) {
             return;
         }
     }
@@ -443,33 +364,6 @@ fn leaf(ctx: &mut LeafCtx, _s: &[i32; MAXR], r: &[i32; 10]) {
     ctx.sum += ctx.wp * (ctx.lcm / (2 * t1 as u128));
 }
 
-fn connected_mask(beats: &[u16; 16], n: usize) -> bool {
-    let full: u16 = ((1u32 << n) - 1) as u16;
-    let mut inn = [0u16; 16];
-    for i in 0..n {
-        let mut w = beats[i];
-        while w != 0 {
-            let j = w.trailing_zeros() as usize;
-            w &= w - 1;
-            inn[j] |= 1 << i;
-        }
-    }
-    let mut seen = 1u16;
-    let mut fr = 1u16;
-    while fr != 0 {
-        let mut nf = 0u16;
-        let mut f = fr;
-        while f != 0 {
-            let v = f.trailing_zeros() as usize;
-            f &= f - 1;
-            nf |= (beats[v] | inn[v]) & !seen;
-        }
-        seen |= nf;
-        fr = nf;
-    }
-    seen == full
-}
-
 // cone DFS over c in {-1,0,1}^g: parent kernel (-sgn adj'' c) must be >= 0
 #[allow(clippy::too_many_arguments)]
 fn cone_dfs(
@@ -538,6 +432,10 @@ fn main() {
         ord: [0; 10],
         pod: [0; 16],
         pid: [0; 16],
+        zpos: [0; 8],
+        zpod: [0; 8],
+        zpid: [0; 8],
+        zmaxpod: 0,
         sum: 0,
         leaves: 0,
         accepted: 0,
@@ -571,7 +469,7 @@ fn main() {
                     }
                 }
             }
-            let mut gm = [[0i64; 8]; 8];
+            let mut gm = [[0i128; 8]; 8];
             for i in 0..g {
                 let mut w = gb[i];
                 while w != 0 {
@@ -581,13 +479,23 @@ fn main() {
                     gm[j][i] = -1;
                 }
             }
-            let (adj, det) = match adjugate8(&gm, g) {
+            // entries are minors of a {-1,0,1} skew matrix: |adj| <= 907,
+            // |det| <= 4096, so i64 holds them with room to spare
+            let (adj128, det128) = match adjugate_ff(&gm, g, false) {
                 Some(x) => x,
                 None => {
                     gsing += 1;
                     continue;
                 }
             };
+            let det = det128 as i64;
+            let mut adj = [[0i64; 8]; 8];
+            for i in 0..g {
+                for j in 0..g {
+                    debug_assert!(adj128[i][j].abs() < (1 << 40));
+                    adj[i][j] = adj128[i][j] as i64;
+                }
+            }
             let sgn: i64 = if det > 0 { 1 } else { -1 };
             let absd = det.abs();
             // grandparent rigidity certificate + Aut(G) handling via sigs
@@ -852,7 +760,7 @@ fn main() {
                 ctx.wp = wp;
                 ctx.nowin = nowin;
                 ctx.noloss = noloss;
-                ctx.parent_disconnected = !connected_mask(&pb, p);
+                ctx.parent_disconnected = !connected_beats(&pb, p);
                 ctx.pbeats = pb;
                 ctx.ord = ord;
                 {
@@ -866,6 +774,23 @@ fn main() {
                             }
                         }
                         ctx.pid[i] = c;
+                    }
+                }
+                {
+                    // Z(v) data in ordered coordinates for the mid-DFS prune
+                    let mut inv = [0u8; 16];
+                    for (k2, &o) in ord[..p].iter().enumerate() {
+                        inv[o] = k2 as u8;
+                    }
+                    ctx.zmaxpod = 0;
+                    for t in 0..nz {
+                        let zv = ctx.zverts[t];
+                        ctx.zpos[t] = inv[zv];
+                        ctx.zpod[t] = ctx.pod[zv];
+                        ctx.zpid[t] = ctx.pid[zv];
+                        if ctx.pod[zv] > ctx.zmaxpod {
+                            ctx.zmaxpod = ctx.pod[zv];
+                        }
                     }
                 }
                 // paradox-forced coordinates (in ordered positions): a parent
@@ -910,7 +835,7 @@ fn main() {
                 }
                 let mut s0 = [0i32; MAXR];
                 let mut r0 = [0i32; 10];
-                child_dfs(0, p, nz, 1 + nz, &mut s0, &mut r0, rows, asum, fplus, fminus, &mut ctx);
+                child_dfs(0, p, nz, 1 + nz, &mut s0, &mut r0, rows, asum, fplus, fminus, 0, 0, &mut ctx);
             }
         }
         let rem = have - nrec * reclen;

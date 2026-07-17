@@ -25,6 +25,9 @@ rustc -O rust/cm_extend.rs -o /tmp/ci_cmx
 rustc -O rust/prime_filter.rs -o /tmp/ci_prime
 rustc -O rust/inc_fast.rs -o /tmp/ci_incf
 rustc -O rust/inc_extend.rs -o /tmp/ci_incx
+rustc -O rust/inc10.rs -o /tmp/ci_inc10 -C link-args="$LINK"
+rustc -O rust/inc4.rs -o /tmp/ci_inc4 -C link-args="$LINK"
+rustc -O rust/inc_strata.rs -o /tmp/ci_incs -C link-args="$LINK"
 rustc -O -C overflow-checks=on rust/burnside_regular.rs -o /tmp/ci_burn
 
 fail=0
@@ -87,6 +90,15 @@ if command -v nauty-geng >/dev/null && command -v nauty-directg >/dev/null; then
     expect "inclusive-fast n=7" "inclusive=10525 (cm/nullity1=7268" incf 7
     expect "inc-extend n=5 (from 4)" "15"    incx 4 5
     expect "inc-extend n=7 (from 6)" "10525" incx 6 7
+    # inclusive(10) stratum engines: labeled nullity-2 sums via the fused
+    # grandparent-stream engine (two-sided endpoint rule) and labeled nullity-4
+    # sums via the Motzkin-fused counter; anchors are the n=6/n=8 ground truth
+    inc10a () { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null | /tmp/ci_inc10 "$2"; }
+    inc4a ()  { nauty-geng "$1" 2>/dev/null | nauty-directg -o 2>/dev/null \
+                | /tmp/ci_incs "$1" f3-emit 3 2>/dev/null | /tmp/ci_inc4 "$2"; }
+    expect "inc10 nullity-2 n=6" "L_nullity2_labeled=126900"      inc10a 4 6
+    expect "inc10 nullity-2 n=8" "L_nullity2_labeled=45897886776" inc10a 6 8
+    expect "inc4 nullity-4 n=6"  "L_nullity4_labeled=4050"        inc4a 5 6
     # split-stream mode: cm to stdout (7268), nullity>=3 to file (3257)
     hi7="$(mktemp)"
     cmside="$(nauty-geng 6 2>/dev/null | nauty-directg -o 2>/dev/null \

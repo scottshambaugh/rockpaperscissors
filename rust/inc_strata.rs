@@ -23,9 +23,6 @@ use std::os::raw::c_int;
 extern "C" {
     fn rps_autsize(arc: *const u64, n: c_int) -> f64;
 }
-fn factorial(n: usize) -> u128 {
-    (1..=n as u128).product::<u128>().max(1)
-}
 
 fn main() {
     let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: incs n [semi]");
@@ -45,7 +42,7 @@ fn main() {
     // inclusive counts by nullity (index = nullity): classes and labeled sums
     let mut incl = [0u64; 12];
     let mut lab_sum = [0u128; 12];
-    let nfact = factorial(n);
+    let nfact = common::factorial(n as u64);
     loop {
         let got = stdin.read(&mut buf[have..]).unwrap();
         if got == 0 {

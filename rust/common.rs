@@ -545,7 +545,7 @@ pub fn kernel_basis_exact(m: &[[i64; 16]; 16], n: usize, d: usize) -> Option<Vec
     Some(basis)
 }
 
-fn gcd_i128(a: i128, b: i128) -> i128 {
+pub fn gcd_i128(a: i128, b: i128) -> i128 {
     if b == 0 { a } else { gcd_i128(b, a % b) }
 }
 
@@ -773,4 +773,180 @@ pub fn is_prime(arc: &Arc, n: usize) -> bool {
         }
     }
     true
+}
+
+// ---- shared machinery for the inclusive-census family (inc10/inc4/inc_count/
+// inc_strata): none of it is specific to any one stratum engine ----
+
+pub fn factorial(n: u64) -> u128 {
+    (1..=n as u128).product::<u128>().max(1)
+}
+
+pub fn lcm_to(n: u64) -> u128 {
+    fn gcd(a: u64, b: u64) -> u64 {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    (1..=n).fold(1u64, |l, x| l / gcd(l, x) * x) as u128
+}
+
+// fraction-free Gauss-Jordan adjugate + determinant (Bareiss divisions exact).
+// adj satisfies b0 * adj = det * I; None if singular within the leading m x m
+// block. `verify` re-checks that identity at runtime -- keep it on wherever the
+// call is per-parent rather than per-grandparent.
+pub fn adjugate_ff<const N: usize>(
+    b0: &[[i128; N]; N],
+    m: usize,
+    verify: bool,
+) -> Option<([[i128; N]; N], i128)> {
+    let mut a = *b0;
+    let mut aug = [[0i128; N]; N];
+    for i in 0..m {
+        aug[i][i] = 1;
+    }
+    let mut denom: i128 = 1;
+    let mut sign: i128 = 1;
+    for k in 0..m {
+        if a[k][k] == 0 {
+            let mut piv = usize::MAX;
+            for r in (k + 1)..m {
+                if a[r][k] != 0 {
+                    piv = r;
+                    break;
+                }
+            }
+            if piv == usize::MAX {
+                return None;
+            }
+            a.swap(k, piv);
+            aug.swap(k, piv);
+            sign = -sign;
+        }
+        let pk = a[k][k];
+        for r in 0..m {
+            if r == k {
+                continue;
+            }
+            let f = a[r][k];
+            for c in 0..m {
+                if c >= k {
+                    a[r][c] = (a[r][c] * pk - f * a[k][c]) / denom;
+                }
+                aug[r][c] = (aug[r][c] * pk - f * aug[k][c]) / denom;
+            }
+            a[r][k] = 0;
+        }
+        denom = pk;
+    }
+    let det = sign * a[m - 1][m - 1];
+    let mut adj = [[0i128; N]; N];
+    for i in 0..m {
+        for j in 0..m {
+            adj[i][j] = sign * aug[i][j];
+        }
+    }
+    if verify {
+        for i in 0..m {
+            for j in 0..m {
+                let mut s = 0i128;
+                for k in 0..m {
+                    s += b0[i][k] * adj[k][j];
+                }
+                assert!(s == if i == j { det } else { 0 }, "adjugate verify failed");
+            }
+        }
+    }
+    Some((adj, det))
+}
+
+// vertex signature inside an n-vertex beats-bitmask game: (od, id, out-
+// neighbour digest, in-neighbour digest), packed comparable. An iso-invariant;
+// digest collisions only weaken rigidity certificates (callers fall back to
+// canon), never correctness.
+pub fn vertex_sigs(beats: &[u16; 16], n: usize, sig: &mut [u64; 16]) {
+    let mut od = [0u8; 16];
+    let mut id = [0u8; 16];
+    for v in 0..n {
+        od[v] = beats[v].count_ones() as u8;
+    }
+    for v in 0..n {
+        let mut c = 0u8;
+        for u in 0..n {
+            if beats[u] & (1 << v) != 0 {
+                c += 1;
+            }
+        }
+        id[v] = c;
+    }
+    for v in 0..n {
+        // order-invariant neighbour digest: sum and sum-of-squares of
+        // neighbour (od,id) codes, separated for out and in
+        let mut so = 0u32;
+        let mut sq = 0u32;
+        let mut si = 0u32;
+        let mut sqi = 0u32;
+        for u in 0..n {
+            let du = ((od[u] as u32) << 5) | id[u] as u32;
+            if beats[v] & (1 << u) != 0 {
+                so += du;
+                sq += du * du;
+            }
+            if beats[u] & (1 << v) != 0 {
+                si += du;
+                sqi += du * du;
+            }
+        }
+        sig[v] = ((od[v] as u64) << 56)
+            | ((id[v] as u64) << 48)
+            | ((so as u64 & 0xFFF) << 36)
+            | ((sq as u64 & 0xFFF) << 24)
+            | ((si as u64 & 0xFFF) << 12)
+            | (sqi as u64 & 0xFFF);
+    }
+}
+
+// weak connectivity of a beats-bitmask game
+pub fn connected_beats(beats: &[u16; 16], n: usize) -> bool {
+    let full: u16 = ((1u32 << n) - 1) as u16;
+    let mut inn = [0u16; 16];
+    for i in 0..n {
+        let mut w = beats[i];
+        while w != 0 {
+            let j = w.trailing_zeros() as usize;
+            w &= w - 1;
+            inn[j] |= 1 << i;
+        }
+    }
+    let mut seen = 1u16;
+    let mut fr = 1u16;
+    while fr != 0 {
+        let mut nf = 0u16;
+        let mut f = fr;
+        while f != 0 {
+            let v = f.trailing_zeros() as usize;
+            f &= f - 1;
+            nf |= (beats[v] | inn[v]) & !seen;
+        }
+        seen |= nf;
+        fr = nf;
+    }
+    seen == full
+}
+
+// paradoxical (every vertex has a win and a loss) + weakly connected
+pub fn paradox_connected_beats(beats: &[u16; 16], n: usize) -> bool {
+    let mut inn = [0u16; 16];
+    for i in 0..n {
+        let mut w = beats[i];
+        while w != 0 {
+            let j = w.trailing_zeros() as usize;
+            w &= w - 1;
+            inn[j] |= 1 << i;
+        }
+    }
+    for i in 0..n {
+        if beats[i] == 0 || inn[i] == 0 {
+            return false;
+        }
+    }
+    connected_beats(beats, n)
 }
