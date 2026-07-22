@@ -16,22 +16,22 @@ echo "nauty headers: $NAUTY_INC"
 
 LINK="/tmp/ci_bshim.o -L/usr/local/lib -lnauty"  # -L covers a source-built libnauty.a
 gcc -O2 -c rust/balanced_shim.c -I"$NAUTY_INC" -o /tmp/ci_bshim.o
-rustc -O rust/balanced.rs -o /tmp/ci_balanced -C link-args="$LINK"
-rustc -O rust/regular.rs  -o /tmp/ci_regular  -C link-args="$LINK"
-rustc -O rust/wbal.rs     -o /tmp/ci_wbal     -C link-args="$LINK"
-rustc -O rust/cm_filter.rs -o /tmp/ci_cmf
-rustc -O rust/factorcrit.rs -o /tmp/ci_fc
-rustc -O rust/cm_extend.rs -o /tmp/ci_cmx
-rustc -O rust/prime_filter.rs -o /tmp/ci_prime
-rustc -O rust/inc_fast.rs -o /tmp/ci_incf
-rustc -O rust/inc_extend.rs -o /tmp/ci_incx
-rustc -O rust/inc10.rs -o /tmp/ci_inc10 -C link-args="$LINK"
-rustc -O rust/inc_hi.rs -o /tmp/ci_inc4 -C link-args="$LINK"
-rustc -O rust/inc_strata.rs -o /tmp/ci_incs -C link-args="$LINK"
-rustc -O rust/sigma_fix.rs -o /tmp/ci_sfix
-rustc -O rust/sigma_sweep.rs -o /tmp/ci_ssweep -C link-args="$LINK"
-rustc -O rust/f3x.rs -o /tmp/ci_f3x -C link-args="$LINK"
-rustc -O rust/labsum.rs -o /tmp/ci_labsum -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/balanced.rs -o /tmp/ci_balanced -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/regular.rs  -o /tmp/ci_regular  -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/wbal.rs     -o /tmp/ci_wbal     -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/cm_filter.rs -o /tmp/ci_cmf
+rustc -O -C overflow-checks=on rust/factorcrit.rs -o /tmp/ci_fc
+rustc -O -C overflow-checks=on rust/cm_extend.rs -o /tmp/ci_cmx
+rustc -O -C overflow-checks=on rust/prime_filter.rs -o /tmp/ci_prime
+rustc -O -C overflow-checks=on rust/inc_fast.rs -o /tmp/ci_incf
+rustc -O -C overflow-checks=on rust/inc_extend.rs -o /tmp/ci_incx
+rustc -O -C overflow-checks=on rust/inc10.rs -o /tmp/ci_inc10 -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/inc_stratum.rs -o /tmp/ci_inc4 -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/inc_strata.rs -o /tmp/ci_incs -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/sigma_fix.rs -o /tmp/ci_sfix
+rustc -O -C overflow-checks=on rust/sigma_sweep.rs -o /tmp/ci_ssweep -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/f3x.rs -o /tmp/ci_f3x -C link-args="$LINK"
+rustc -O -C overflow-checks=on rust/labsum.rs -o /tmp/ci_labsum -C link-args="$LINK"
 rustc -O -C overflow-checks=on rust/burnside_regular.rs -o /tmp/ci_burn
 
 fail=0

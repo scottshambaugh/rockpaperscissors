@@ -18,7 +18,7 @@ use std::env;
 use std::io::{self, Read};
 
 mod common;
-use common::{cone_has_nonneg, fully_mixed, kernel_basis_exact, pf};
+use common::{cone_has_nonneg, has_positive_kernel, kernel_basis_exact, pf};
 use std::os::raw::c_int;
 extern "C" {
     fn rps_autsize(arc: *const u64, n: c_int) -> f64;
@@ -40,8 +40,8 @@ fn main() {
     let full: u16 = (1u16 << n) - 1;
     let (mut total, mut semi, mut semi_strict) = (0u64, 0u64, 0u64);
     // inclusive counts by nullity (index = nullity): classes and labeled sums
-    let mut incl = [0u64; 12];
-    let mut lab_sum = [0u128; 12];
+    let mut incl = [0u64; 17];
+    let mut lab_sum = [0u128; 17];
     let nfact = common::factorial(n as u64);
     loop {
         let got = stdin.read(&mut buf[have..]).unwrap();
@@ -154,7 +154,7 @@ fn main() {
             if seen != full {
                 continue;
             }
-            if !fully_mixed(&out, n) {
+            if !has_positive_kernel(&m, n) {
                 continue;
             }
             // nullity via integer-preserving Gaussian rank over rationals (f64
@@ -197,9 +197,8 @@ fn main() {
             for i in 0..n {
                 arc64[i] = out[i] as u64;
             }
-            let aut = unsafe { rps_autsize(arc64.as_ptr(), n as c_int) };
-            let aut_u = aut as u128;
-            assert!(aut > 0.0 && (nfact % aut_u == 0), "n!/|Aut| not integer");
+            let aut_u = common::autsize_u128(unsafe { rps_autsize(arc64.as_ptr(), n as c_int) });
+            assert!(aut_u > 0 && (nfact % aut_u == 0), "n!/|Aut| not integer");
             lab_sum[d] += nfact / aut_u;
         }
         let rem = have - nrec * reclen;
@@ -216,7 +215,7 @@ fn main() {
         }
     } else {
         let tot: u64 = incl.iter().sum();
-        let strata: Vec<String> = (0..12)
+        let strata: Vec<String> = (0..17)
             .filter(|&d| incl[d] > 0)
             .map(|d| format!("nullity{}={} (labeled {})", d, incl[d], lab_sum[d]))
             .collect();

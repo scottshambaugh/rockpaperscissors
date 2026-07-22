@@ -334,6 +334,36 @@ fn z_lambda(lam: &[usize]) -> u128 {
     z
 }
 
+// Burnside integrality gate + modular fingerprint (cf. inclusive-census
+// sigma_gate.py; see README). count = (Sum over cycle types of Fix*mult)/m! must
+// be an integer. On failure, factor the residual: m! is m-smooth and every
+// multiplicity divides m!, so a residual prime factor > m cannot come from a
+// multiplicity -- it points at a wrong per-cycle Fix or an overflowed
+// accumulator, not the combinatorics.
+fn assert_burnside_integral(total: u128, mfact: u128, m: usize) {
+    if total % mfact == 0 {
+        return;
+    }
+    let r = total % mfact;
+    let (mut x, mut p, mut f) = (r, 2u128, Vec::new());
+    while p * p <= x {
+        while x % p == 0 {
+            f.push(p);
+            x /= p;
+        }
+        p += 1;
+    }
+    if x > 1 {
+        f.push(x);
+    }
+    eprintln!("BURNSIDE GATE FAILED (m={m}): sum not divisible by m!={mfact}");
+    eprintln!("  residual = {r} = {f:?}");
+    if let Some(&big) = f.iter().find(|&&q| q as usize > m) {
+        eprintln!("  prime factor {big} > m={m}: NOT reachable from any cycle-type multiplicity (all m-smooth) -- a per-cycle Fix or an accumulator is wrong.");
+    }
+    panic!("Burnside sum not divisible by m!");
+}
+
 fn iso_all(m: usize, ctx: &mut Ctx) -> u128 {
     let mut parts = Vec::new();
     partitions(m, m, &mut Vec::new(), &mut parts);
@@ -347,7 +377,7 @@ fn iso_all(m: usize, ctx: &mut Ctx) -> u128 {
         let fx = ctx.g(&mut cstate, &mut fstate);
         total += fx * (mfact / z_lambda(lam));
     }
-    assert!(total % mfact == 0, "Burnside sum not divisible by m!");
+    assert_burnside_integral(total, mfact, m);
     total / mfact
 }
 

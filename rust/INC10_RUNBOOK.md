@@ -15,11 +15,22 @@ pipeline must give exactly inclusive(8) = 1,198,013 before launch.
 
 ## The identity
 
-    inclusive(10) = ( L2 + L4 + L6 + SIGMA ) / 10!
+    inclusive(10) = ( L2 + L4 + L6 + L8 + SIGMA ) / 10!
 
 where L_D = labeled count of nullity-D inclusive 10-vertex games and
 SIGMA = sum over the 41 nontrivial cycle types of S_10 of #sigma x Fix_sigma.
-The identity term L_inc(10) = L2 + L4 + L6.
+The identity term L_inc(10) = L2 + L4 + L6 + L8.
+
+  L8 = 8,884,050  (nullity-8 = rank-2 inclusive games: rock-paper-scissors
+  blow-ups and kin). CRITICAL: a rank-r inclusive game has nullity N-r, so the
+  rank-2 family sits in L6 at N=8 but MIGRATES to L8 at N=10 -- L2+L4+L6 alone
+  undercounts and the /N! integrality gate fails (residual 2,002,350). General
+  rule: L_inc(N) = sum of L_D over even D = 2 .. N-2 (nullity N = the zero
+  matrix, never inclusive). N=12 additionally needs L10; the strata engines
+  (f3x d=D-1, inc_stratum N D) and the driver's high-strata loop now handle any even
+  D up to N-2 (dimension caps are width-16, good through N=16).
+
+  inclusive(10) = 360,415,933,231  (integrality gate PASSED).
 
 ## Prerequisites (ALL COMPUTED AND CONFIRMED)
 
@@ -70,10 +81,10 @@ parallelism; shards are unbalanced, so use >= 32 shards under xargs -P4.
    concatenated, then `nauty-labelg | sort -S 2G -T <scratch> -u
    > parents_9_3.d6`. (f3x anchor: reproduces the inc_strata f3-emit streams
    byte-identically at n=7.) Volume estimate ~100-300M raw records / a few GB.
-3. **Stratum 4**: split parents_9_3.d6 into 4 chunks, `inc_hi 10 4` each, sum.
+3. **Stratum 4**: split parents_9_3.d6 into 4 chunks, `inc_stratum 10 4` each, sum.
    (Calibrate first on 100k parents; n=8 rate was ~200us/parent.)
 4. **Stratum 6 parents**: same with `f3x 8 5` -> parents_9_5.d6 (tiny).
-5. **Stratum 6**: `inc_hi 10 6 < parents_9_5.d6` (minutes).
+5. **Stratum 6**: `inc_stratum 10 6 < parents_9_5.d6` (minutes).
 
 ## Phase 2 -- sigma corrections
 

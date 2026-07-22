@@ -30,7 +30,7 @@ use std::env;
 use std::io::{self, Read, Write, BufWriter};
 
 mod common;
-use common::{added_is_maximal, decode, dfs, encode, inverse};
+use common::{added_is_maximal, adjugate_ff, dfs_neg, encode, narrow_i64};
 
 fn main() {
     let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: cmx n");
@@ -45,10 +45,10 @@ fn main() {
     let mut w = BufWriter::with_capacity(1 << 20, out.lock());
     let mut child = Vec::with_capacity(2 + (n * n + 5) / 6 + 1);
 
-    let mut mp = [[0f64; 8]; 8];
-    let mut r = [0i32; 8];
-    let mut valid: Vec<[i32; 8]> = Vec::with_capacity(256);
+    let mut r = [0i32; 16];
+    let mut valid: Vec<[i32; 16]> = Vec::with_capacity(256);
     let (mut parents, mut nonsing, mut emitted) = (0u64, 0u64, 0u64);
+    let pbytes = (p * p + 5) / 6;
 
     loop {
         let got = stdin.read(&mut buf[have..]).unwrap();
@@ -63,55 +63,81 @@ fn main() {
                 continue;
             }
             parents += 1;
-            decode(rec, p, &mut mp);
-            let inv = match inverse(&mp, p) {
-                Some(x) => x,
-                None => continue, // singular parent: no completely mixed child
+            // unpack the p-vertex digraph6 record into out-adjacency masks
+            let mut base = [0u16; 16];
+            let payload = &rec[2..2 + pbytes];
+            let mut kk = 0usize;
+            'dec: for &byte in payload {
+                let mut bits = ((byte - 63) as u32) << 26;
+                for _ in 0..6 {
+                    if bits & 0x8000_0000 != 0 {
+                        base[kk / p] |= 1 << (kk % p);
+                    }
+                    bits <<= 1;
+                    kk += 1;
+                    if kk == p * p {
+                        break 'dec;
+                    }
+                }
+            }
+            // integer skew M'
+            let mut mp = [[0i128; 16]; 16];
+            for i in 0..p {
+                let mut wm = base[i];
+                while wm != 0 {
+                    let j = wm.trailing_zeros() as usize;
+                    wm &= wm - 1;
+                    mp[i][j] = 1;
+                    mp[j][i] = -1;
+                }
+            }
+            // exact adjugate: M'^-1 = adj/det, det = Pf^2 > 0 when nonsingular.
+            // -M'^-1 r > 0  <=>  sgn(det)*(adj . r)_i < 0 for all i. Checked-i64
+            // fast path (each op overflow-guarded), i128 only on the rare spill.
+            let (adj, det) = match common::adjugate_ff_i64(&mp, p, false) {
+                Ok(Some(x)) => x,
+                Ok(None) => continue, // singular parent: no completely mixed child
+                Err(()) => match adjugate_ff(&mp, p, false) {
+                    Some(x) => x,
+                    None => continue,
+                },
             };
             nonsing += 1;
-            // order columns by descending L1 norm so the DFS bound tightens
-            // fastest (more pruning), then build the reordered column matrix wc
-            let mut ord = [0usize; 8];
+            let sd: i128 = if det > 0 { 1 } else { -1 };
+            // order columns by descending L1 of adj columns -> fastest prune
+            let mut ord = [0usize; 16];
             for (k, o) in ord[..p].iter_mut().enumerate() {
                 *o = k;
             }
-            let mut l1 = [0f64; 8];
+            let mut l1 = [0i128; 16];
             for k in 0..p {
-                let mut sum = 0f64;
+                let mut sum = 0i128;
                 for i in 0..p {
-                    sum += inv[i][k].abs();
+                    sum += adj[i][k].abs();
                 }
                 l1[k] = sum;
             }
-            ord[..p].sort_unstable_by(|&a, &b| l1[b].partial_cmp(&l1[a]).unwrap());
-            let mut wc = [[0f64; 8]; 8];
+            ord[..p].sort_unstable_by(|&a, &b| l1[b].cmp(&l1[a]));
+            // reordered rows wc[i][k] = sgn(det)*adj[i][ord[k]] (checked i64)
+            let mut wc = [[0i64; 16]; 16];
             for k in 0..p {
                 for i in 0..p {
-                    wc[i][k] = inv[i][ord[k]];
+                    wc[i][k] = narrow_i64(sd * adj[i][ord[k]]);
                 }
             }
             // suffix absolute column-sums of wc for the DFS bound
-            let mut asum = [[0f64; 8]; 9];
+            let mut asum = [[0i64; 16]; 17];
             for k in (0..p).rev() {
                 for i in 0..p {
                     asum[k][i] = asum[k + 1][i] + wc[i][k].abs();
                 }
             }
-            // collect the (few) valid r (in ordered coords) via bound-pruned DFS
+            // collect the (few) valid r (ordered coords): (wc r)_i < 0 for all i
             valid.clear();
-            let mut s0 = [0f64; 8];
-            dfs(0, p, &mut s0, &mut r, &wc, &asum, &mut valid);
+            let mut s0 = [0i64; 16];
+            dfs_neg(0, p, &mut s0, &mut r, &wc, &asum, &mut valid);
             if valid.is_empty() {
                 continue;
-            }
-            // parent arcs are the same for every child; build them once
-            let mut base = [0u16; 16];
-            for i in 0..p {
-                for j in 0..p {
-                    if mp[i][j] > 0.5 {
-                        base[i] |= 1 << j;
-                    }
-                }
             }
             for rv in valid.iter() {
                 let mut beats = base;

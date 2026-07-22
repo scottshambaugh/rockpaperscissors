@@ -55,7 +55,7 @@ fn main() {
                     }
                 }
             }
-            let aut = unsafe { rps_autsize(beats.as_ptr(), n as c_int) } as u128;
+            let aut = common::autsize_u128(unsafe { rps_autsize(beats.as_ptr(), n as c_int) });
             debug_assert!(nfact % aut == 0);
             labeled += nfact / aut;
         }

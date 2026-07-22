@@ -193,7 +193,7 @@ fn main() {
                 for i in 0..n {
                     arc64[i] = beats[i] as u64;
                 }
-                (unsafe { rps_autsize(arc64.as_ptr(), n as c_int) }) as u128
+                common::autsize_u128(unsafe { rps_autsize(arc64.as_ptr(), n as c_int) })
             };
             let (mut c_j1, mut c_j0, mut c_k0b, mut c_h1) = (0u64, 0u64, 0u64, 0u64);
             if inclusive {

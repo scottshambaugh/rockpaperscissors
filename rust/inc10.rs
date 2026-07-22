@@ -51,13 +51,15 @@ fn child_dfs(
     nstrict: usize,
     nl: usize,
     s: &mut [i32; MAXR],
-    r: &mut [i32; 10],
+    r: &mut [i32; 16],
     rows: &[[i32; 16]; MAXR],
-    asum: &[[i32; 11]; MAXR],
+    asum: &[[i32; 16]; MAXR],
     fplus: u16,
     fminus: u16,
     nod: u8,
     nid: u8,
+    pmask: u16,
+    mmask: u16,
     ctx: &mut LeafCtx,
 ) {
     // row 0: equality (v . r = 0); rows 1..1+nstrict: strictly negative
@@ -70,7 +72,7 @@ fn child_dfs(
         }
     }
     if k == p {
-        leaf(ctx, s, r);
+        leaf(ctx, r, pmask, mmask);
         return;
     }
     if nstrict != 0 {
@@ -143,7 +145,9 @@ fn child_dfs(
                     }
                 }
                 if ok {
-                    leaf(ctx, s, r);
+                    let np = if val > 0 { pmask | ctx.obit[k] } else { pmask };
+                    let nm = if val < 0 { mmask | ctx.obit[k] } else { mmask };
+                    leaf(ctx, r, np, nm);
                 }
                 if val != 0 {
                     for i in 0..nl {
@@ -168,7 +172,9 @@ fn child_dfs(
             }
         }
         if ok {
-            leaf(ctx, s, r);
+            let np = if val > 0 { pmask | ctx.obit[k] } else { pmask };
+            let nm = if val < 0 { mmask | ctx.obit[k] } else { mmask };
+            leaf(ctx, r, np, nm);
         }
         if val != 0 {
             for i in 0..nl {
@@ -187,7 +193,9 @@ fn child_dfs(
                     s[i] += val * rows[i][k];
                 }
             }
-            child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, 0, 0, nod + (val < 0) as u8, nid + (val > 0) as u8, ctx);
+            let np = if val > 0 { pmask | ctx.obit[k] } else { pmask };
+            let nm = if val < 0 { mmask | ctx.obit[k] } else { mmask };
+            child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, 0, 0, nod + (val < 0) as u8, nid + (val > 0) as u8, np, nm, ctx);
             if val != 0 {
                 for i in 0..nl {
                     s[i] -= val * rows[i][k];
@@ -210,7 +218,9 @@ fn child_dfs(
                 s[i] += val * rows[i][k];
             }
         }
-        child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, fplus, fminus, nod + (val < 0) as u8, nid + (val > 0) as u8, ctx);
+        let np = if val > 0 { pmask | ctx.obit[k] } else { pmask };
+        let nm = if val < 0 { mmask | ctx.obit[k] } else { mmask };
+        child_dfs(k + 1, p, nstrict, nl, s, r, rows, asum, fplus, fminus, nod + (val < 0) as u8, nid + (val > 0) as u8, np, nm, ctx);
         if val != 0 {
             for i in 0..nl {
                 s[i] -= val * rows[i][k];
@@ -220,17 +230,159 @@ fn child_dfs(
     r[k] = 0;
 }
 
+
+// monomorphized child DFS for small strict-row counts (nz = NL-1 in 1..=3,
+// 85% of all leaves): the running sums live in a by-value [i32; NL] that the
+// compiler keeps in registers, so branch updates copy instead of do/undo and
+// every row loop unrolls. Logic is a verbatim mirror of child_dfs.
+#[allow(clippy::too_many_arguments)]
+fn dfs_m<const NL: usize>(
+    k: usize,
+    p: usize,
+    s: [i32; NL],
+    r: &mut [i32; 16],
+    rows: &[[i32; 16]; MAXR],
+    asum: &[[i32; 16]; MAXR],
+    fplus: u16,
+    fminus: u16,
+    nod: u8,
+    nid: u8,
+    pmask: u16,
+    mmask: u16,
+    ctx: &mut LeafCtx,
+) {
+    if s[0].abs() > asum[0][k] {
+        return;
+    }
+    for i in 1..NL {
+        if s[i] - asum[i][k] >= 0 {
+            return;
+        }
+    }
+    if k == p {
+        leaf(ctx, r, pmask, mmask);
+        return;
+    }
+    {
+        let cap = nod + (p - k) as u8;
+        if cap < ctx.zmaxpod {
+            return;
+        }
+        if cap <= ctx.zmaxpod + 1 {
+            for t in 0..(NL - 1) {
+                let posz = ctx.zpos[t] as usize;
+                let (czp, czm) = if posz < k {
+                    let rv = r[posz];
+                    ((rv > 0) as u8, (rv < 0) as u8)
+                } else {
+                    (0u8, 1u8)
+                };
+                let codmin = ctx.zpod[t] + czp;
+                if cap < codmin || (cap == codmin && nid < ctx.zpid[t] + czm) {
+                    return;
+                }
+            }
+        }
+    }
+    unsafe { NODES += 1; }
+    if k + 1 == p {
+        let c0 = rows[0][k];
+        let fp = (fplus >> k) & 1 != 0;
+        let fm = (fminus >> k) & 1 != 0;
+        if c0 != 0 {
+            if s[0] % c0 != 0 {
+                return;
+            }
+            let v = -s[0] / c0;
+            if v < -1 || v > 1 || (fp && v != 1) || (fm && v != -1) {
+                return;
+            }
+            let mut s2 = s;
+            if v != 0 {
+                for i in 0..NL {
+                    s2[i] += v * rows[i][k];
+                }
+            }
+            let mut ok = true;
+            for i in 1..NL {
+                if s2[i] >= 0 {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                r[k] = v;
+                let np = if v > 0 { pmask | ctx.obit[k] } else { pmask };
+                let nm = if v < 0 { mmask | ctx.obit[k] } else { mmask };
+                leaf(ctx, r, np, nm);
+                r[k] = 0;
+            }
+            return;
+        }
+        if s[0] != 0 {
+            return;
+        }
+        for val in [0i32, -1, 1] {
+            if (fp && val != 1) || (fm && val != -1) {
+                continue;
+            }
+            let mut s2 = s;
+            if val != 0 {
+                for i in 0..NL {
+                    s2[i] += val * rows[i][k];
+                }
+            }
+            let mut ok = true;
+            for i in 1..NL {
+                if s2[i] >= 0 {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                r[k] = val;
+                let np = if val > 0 { pmask | ctx.obit[k] } else { pmask };
+                let nm = if val < 0 { mmask | ctx.obit[k] } else { mmask };
+                leaf(ctx, r, np, nm);
+                r[k] = 0;
+            }
+        }
+        return;
+    }
+    for val in [0i32, -1, 1] {
+        if (fplus >> k) & 1 != 0 && val != 1 {
+            continue;
+        }
+        if (fminus >> k) & 1 != 0 && val != -1 {
+            continue;
+        }
+        let mut s2 = s;
+        if val != 0 {
+            for i in 0..NL {
+                s2[i] += val * rows[i][k];
+            }
+        }
+        r[k] = val;
+        let np = if val > 0 { pmask | ctx.obit[k] } else { pmask };
+        let nm = if val < 0 { mmask | ctx.obit[k] } else { mmask };
+        dfs_m::<NL>(k + 1, p, s2, r, rows, asum, fplus, fminus, nod + (val < 0) as u8, nid + (val > 0) as u8, np, nm, ctx);
+    }
+    r[k] = 0;
+}
+
 struct LeafCtx {
     p: usize,             // parent size = n-1
     nz: usize,            // |Z(v)|: 0 => CM parent, trivial half-weight accept
-    zverts: [usize; 10],  // original indices of the Z(v) vertices
+    zverts: [usize; 16],  // original indices of the Z(v) vertices
     wp: u128,             // (n-1)!/|Aut(P)|
     lcm: u128,
+    lcm2t: [u128; 16],    // lcm / (2 t), t = 1..=11: kills the per-leaf u128 division
     nowin: u16,
     noloss: u16,
     parent_disconnected: bool,
     pbeats: [u16; 16],
-    ord: [usize; 10],
+    ord: [usize; 16],
+    obit: [u16; 16], // 1 << ord[k], for the incremental leaf masks
     // parent degrees (child degrees = these + r contribution)
     pod: [u8; 16],
     pid: [u8; 16],
@@ -244,18 +396,10 @@ struct LeafCtx {
     accepted: u64,
 }
 
-fn leaf(ctx: &mut LeafCtx, _s: &[i32; MAXR], r: &[i32; 10]) {
+// plus/minus (original-vertex bitmasks of r > 0 / r < 0) are maintained
+// incrementally by the DFS -- one OR per branch replaces a p-loop per leaf
+fn leaf(ctx: &mut LeafCtx, r: &[i32; 16], plus: u16, minus: u16) {
     let p = ctx.p;
-    let mut plus = 0u16; // vertices that beat the new vertex
-    let mut minus = 0u16; // vertices the new vertex beats
-    for i in 0..p {
-        let c = ctx.ord[i];
-        if r[i] > 0 {
-            plus |= 1 << c;
-        } else if r[i] < 0 {
-            minus |= 1 << c;
-        }
-    }
     if minus == 0 || plus == 0 {
         return;
     }
@@ -278,7 +422,7 @@ fn leaf(ctx: &mut LeafCtx, _s: &[i32; MAXR], r: &[i32; 10]) {
     if ctx.nz == 0 {
         // CM parent: Z1 = {new}, always the argmax -- weight 1/2
         ctx.accepted += 1;
-        ctx.sum += ctx.wp * (ctx.lcm / 2);
+        ctx.sum += ctx.wp * ctx.lcm2t[1];
         return;
     }
     // two-sided rule: accept iff the new vertex attains the max of an
@@ -361,7 +505,7 @@ fn leaf(ctx: &mut LeafCtx, _s: &[i32; MAXR], r: &[i32; 10]) {
     }
     ctx.leaves += 0;
     ctx.accepted += 1;
-    ctx.sum += ctx.wp * (ctx.lcm / (2 * t1 as u128));
+    ctx.sum += ctx.wp * ctx.lcm2t[t1 as usize];
 }
 
 // cone DFS over c in {-1,0,1}^g: parent kernel (-sgn adj'' c) must be >= 0
@@ -403,9 +547,68 @@ fn cone_dfs(
     c[k] = 0;
 }
 
+
+// bulk child count for a CM parent (nz = 0, no forced coordinates, connected):
+// every solution r of the equality v.r = 0 with at least one positive and one
+// negative coordinate is an accepted leaf of weight wp*lcm/2 (Z1 = {new} is
+// always the singleton argmax), so the DFS collapses to a solution count.
+// Meet-in-the-middle on the equality row; by the r -> -r symmetry of both the
+// equality and the nonneg/nonpos rejects, accepted = N_all - 2*N_nonneg + 1.
+fn cm_child_count(coef: &[i64; 16], p: usize) -> u64 {
+    fn half(coef: &[i64; 16], lo: usize, hi: usize) -> Vec<(i64, u32, u32)> {
+        let k = hi - lo;
+        let mut raw: Vec<(i64, bool)> = Vec::with_capacity(3usize.pow(k as u32));
+        let mut dig = [-1i32; 16];
+        'outer: loop {
+            let mut s = 0i64;
+            let mut anyneg = false;
+            for t in 0..k {
+                s += dig[t] as i64 * coef[lo + t];
+                anyneg |= dig[t] < 0;
+            }
+            raw.push((s, anyneg));
+            let mut t = 0;
+            loop {
+                if t == k {
+                    break 'outer;
+                }
+                dig[t] += 1;
+                if dig[t] <= 1 {
+                    break;
+                }
+                dig[t] = -1;
+                t += 1;
+            }
+        }
+        raw.sort_unstable_by_key(|e| e.0);
+        let mut agg: Vec<(i64, u32, u32)> = Vec::with_capacity(raw.len());
+        for (s, anyneg) in raw {
+            match agg.last_mut() {
+                Some(e) if e.0 == s => {
+                    e.1 += 1;
+                    e.2 += !anyneg as u32;
+                }
+                _ => agg.push((s, 1, !anyneg as u32)),
+            }
+        }
+        agg
+    }
+    let h = p / 2;
+    let a = half(coef, 0, h);
+    let b = half(coef, h, p);
+    let (mut n_all, mut n_nonneg) = (0u64, 0u64);
+    for &(s, tot, nn) in b.iter() {
+        if let Ok(ix) = a.binary_search_by_key(&-s, |e| e.0) {
+            n_all += a[ix].1 as u64 * tot as u64;
+            n_nonneg += a[ix].2 as u64 * nn as u64;
+        }
+    }
+    n_all - 2 * n_nonneg + 1
+}
+
 fn main() {
     let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: inc10 n < grandparents");
-    assert!(n % 2 == 0 && (6..=10).contains(&n));
+    assert!(n % 2 == 0 && (6..=16).contains(&n));
     let g = n - 2; // grandparent size
     let p = n - 1; // parent size
     let gsq = g * g;
@@ -422,14 +625,24 @@ fn main() {
     let mut ctx = LeafCtx {
         p,
         nz: 0,
-        zverts: [0; 10],
+        zverts: [0; 16],
         wp: 0,
         lcm,
+        lcm2t: {
+            let mut a = [0u128; 16];
+            let mut t = 1usize;
+            while t < 16 {
+                a[t] = lcm / (2 * t as u128);
+                t += 1;
+            }
+            a
+        },
         nowin: 0,
         noloss: 0,
         parent_disconnected: false,
         pbeats: [0; 16],
-        ord: [0; 10],
+        ord: [0; 16],
+        obit: [0; 16],
         pod: [0; 16],
         pid: [0; 16],
         zpos: [0; 8],
@@ -488,12 +701,11 @@ fn main() {
                     continue;
                 }
             };
-            let det = det128 as i64;
+            let det = common::narrow_i64(det128);
             let mut adj = [[0i64; 8]; 8];
             for i in 0..g {
                 for j in 0..g {
-                    debug_assert!(adj128[i][j].abs() < (1 << 40));
-                    adj[i][j] = adj128[i][j] as i64;
+                    adj[i][j] = common::narrow_i64(adj128[i][j]);
                 }
             }
             let sgn: i64 = if det > 0 { 1 } else { -1 };
@@ -543,7 +755,7 @@ fn main() {
             unsafe { CONE_LEAVES += cone.len() as u64; }
             let mut rows_buf = [[0i32; 16]; MAXR];
             let mut prows_buf = [[0i32; 16]; MAXR];
-            let mut asum_buf = [[0i32; 11]; MAXR];
+            let mut asum_buf = [[0i32; 16]; MAXR];
             for (cv, kv) in cone.iter() {
                 // parent P = G + vertex g with column c: c_i = M'[i][g]
                 // kernel v = (kv_0..kv_{g-1}, |det|) all >= 0, last > 0
@@ -674,7 +886,7 @@ fn main() {
                     if !canon_seen.insert(key) {
                         continue;
                     }
-                    let aut = unsafe { rps_autsize(arc64.as_ptr(), p as c_int) } as u128;
+                    let aut = common::autsize_u128(unsafe { rps_autsize(arc64.as_ptr(), p as c_int) });
                     wp = pfact / aut;
                     parents_canon += 1;
                 }
@@ -684,27 +896,63 @@ fn main() {
                 //       then tracking rows for supp(v) minus last vertex
                 let rows = &mut rows_buf; // cols 0..=g rewritten; DFS reads only those
                 for i in 0..g {
-                    rows[0][i] = kv[i] as i32;
+                    rows[0][i] = common::narrow_i32(kv[i]);
                 }
-                rows[0][g] = absd as i32;
+                rows[0][g] = common::narrow_i32(absd);
                 let mut nz = 0usize;
                 for i in 0..g {
                     if kv[i] == 0 {
                         for j in 0..g {
-                            rows[1 + nz][j] = (sgn * adj[i][j]) as i32;
+                            rows[1 + nz][j] = common::narrow_i32(sgn * adj[i][j]);
                         }
                         nz += 1;
+                    }
+                }
+                if nz == 0 {
+                    // CM parent: the child DFS collapses to a closed-form
+                    // count. The guards re-verify the conditions (provably
+                    // always true for CM parents: no vertex can be win-less
+                    // or loss-less against a strictly positive kernel, and
+                    // disconnected components would each add nullity); on any
+                    // failure fall through to the general DFS unchanged.
+                    let mut inn0 = [0u16; 16];
+                    for i in 0..p {
+                        let mut w = pb[i];
+                        while w != 0 {
+                            let j = w.trailing_zeros() as usize;
+                            w &= w - 1;
+                            inn0[j] |= 1 << i;
+                        }
+                    }
+                    let mut cm_ok = true;
+                    for i in 0..p {
+                        if pb[i] == 0 || inn0[i] == 0 {
+                            cm_ok = false;
+                            break;
+                        }
+                    }
+                    if cm_ok && connected_beats(&pb, p) {
+                        let mut coef = [0i64; 16];
+                        for i in 0..g {
+                            coef[i] = kv[i];
+                        }
+                        coef[g] = absd;
+                        let acc = cm_child_count(&coef, p);
+                        ctx.leaves += acc;
+                        ctx.accepted += acc;
+                        ctx.sum += wp * ctx.lcm2t[1] * acc as u128;
+                        continue;
                     }
                 }
                 let nl = 1 + nz;
                 // order columns by descending combined L1 of the pruning rows
                 // so bounds tighten fastest (leaf semantics need the inverse
                 // permutation for the r bitmasks)
-                let mut ord = [0usize; 10];
+                let mut ord = [0usize; 16];
                 for (t, o) in ord[..p].iter_mut().enumerate() {
                     *o = t;
                 }
-                let mut l1 = [0i32; 10];
+                let mut l1 = [0i32; 16];
                 for c in 0..p {
                     let mut sum = 0i32;
                     for i in 0..(1 + nz) {
@@ -763,6 +1011,9 @@ fn main() {
                 ctx.parent_disconnected = !connected_beats(&pb, p);
                 ctx.pbeats = pb;
                 ctx.ord = ord;
+                for k2 in 0..p {
+                    ctx.obit[k2] = 1 << ord[k2];
+                }
                 {
                     // parent degrees for child-degree derivation at leaves
                     for i in 0..p {
@@ -833,9 +1084,16 @@ fn main() {
                 if impossible {
                     continue;
                 }
-                let mut s0 = [0i32; MAXR];
-                let mut r0 = [0i32; 10];
-                child_dfs(0, p, nz, 1 + nz, &mut s0, &mut r0, rows, asum, fplus, fminus, 0, 0, &mut ctx);
+                let mut r0 = [0i32; 16];
+                match nz {
+                    1 => dfs_m::<2>(0, p, [0i32; 2], &mut r0, rows, asum, fplus, fminus, 0, 0, 0, 0, &mut ctx),
+                    2 => dfs_m::<3>(0, p, [0i32; 3], &mut r0, rows, asum, fplus, fminus, 0, 0, 0, 0, &mut ctx),
+                    3 => dfs_m::<4>(0, p, [0i32; 4], &mut r0, rows, asum, fplus, fminus, 0, 0, 0, 0, &mut ctx),
+                    _ => {
+                        let mut s0 = [0i32; MAXR];
+                        child_dfs(0, p, nz, 1 + nz, &mut s0, &mut r0, rows, asum, fplus, fminus, 0, 0, 0, 0, &mut ctx);
+                    }
+                }
             }
         }
         let rem = have - nrec * reclen;

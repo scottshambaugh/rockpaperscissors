@@ -469,6 +469,31 @@ fn z_lambda(lam: &[usize]) -> u64 {
     z
 }
 
+// Burnside integrality gate + modular fingerprint (see burnside_regular.rs /
+// README): a residual prime factor > m cannot come from an m-smooth
+// multiplicity, so it flags a wrong per-cycle Fix or an overflowed accumulator.
+fn assert_wide_integral(r: u64, m: usize) {
+    if r == 0 {
+        return;
+    }
+    let (mut x, mut p, mut f) = (r, 2u64, Vec::new());
+    while p * p <= x {
+        while x % p == 0 {
+            f.push(p);
+            x /= p;
+        }
+        p += 1;
+    }
+    if x > 1 {
+        f.push(x);
+    }
+    eprintln!("BURNSIDE-WIDE GATE FAILED (m={m}): residual = {r} = {f:?}");
+    if let Some(&big) = f.iter().find(|&&q| q as usize > m) {
+        eprintln!("  prime factor {big} > m={m}: not from any m-smooth multiplicity -- a per-cycle Fix or accumulator is wrong.");
+    }
+    panic!("Burnside sum not divisible by m!");
+}
+
 fn iso_all(m: usize, ctx: &mut Ctx) -> W {
     let mut parts = Vec::new();
     partitions(m, m, &mut Vec::new(), &mut parts);
@@ -483,7 +508,7 @@ fn iso_all(m: usize, ctx: &mut Ctx) -> W {
         total = total.add(&fx.mul_u64(mfact / z_lambda(lam)));
     }
     let (q, r) = total.divmod_u64(mfact);
-    assert!(r == 0, "Burnside sum not divisible by m!");
+    assert_wide_integral(r, m);
     q
 }
 

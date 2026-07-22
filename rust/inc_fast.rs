@@ -24,7 +24,7 @@ use std::env;
 use std::io::{self, Read};
 
 mod common;
-use common::{fully_mixed, pf};
+use common::{has_positive_kernel, pf};
 
 fn main() {
     let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).expect("usage: incf n");
@@ -148,7 +148,7 @@ fn main() {
                 // all cofactors zero -> nullity >= 3 -> the >=3-dim kernel needs the LP
                 hi_null += 1;
                 lp_calls += 1;
-                if fully_mixed(&out, n) {
+                if has_positive_kernel(&m, n) {
                     inc += 1;
                 }
             }

@@ -197,7 +197,7 @@ fn main() {
             for i in 0..p {
                 arc64[i] = beats[i] as u64;
             }
-            let aut = unsafe { rps_autsize(arc64.as_ptr(), p as c_int) } as u128;
+            let aut = common::autsize_u128(unsafe { rps_autsize(arc64.as_ptr(), p as c_int) });
             let wp = pfact / aut;
             // bordered matrix + adjugate block rows for i in 0..p
             let mut b0 = [[0i128; 11]; 11];

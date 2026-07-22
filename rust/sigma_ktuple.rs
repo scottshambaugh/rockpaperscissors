@@ -157,7 +157,7 @@ fn main() {
                 for i in 0..m {
                     arc64[i] = beats[i] as u64;
                 }
-                let aut = unsafe { rps_autsize(arc64.as_ptr(), m as c_int) } as u128;
+                let aut = common::autsize_u128(unsafe { rps_autsize(arc64.as_ptr(), m as c_int) });
                 num += (mfact / aut) * (count_class * kfact) as u128;
             }
         }

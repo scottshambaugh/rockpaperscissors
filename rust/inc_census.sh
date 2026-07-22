@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Full inclusive(N) census runner, N-parametric (N even, 8 or 10): the SAME
-# code path serves the n=8 rehearsal gate and the n=10 production run.
+# Full inclusive(N) census runner, N-parametric (N even, 8..16): the SAME code
+# path serves the n=8 rehearsal gate and the n>=10 production runs. L_inc(N) =
+# sum of all even nullity strata L2..L_{N-2} (the high-strata loop below is what
+# makes it complete at N>=10; see README "Inclusive census").
 #
 #   bash inc_census.sh N            (env: WORK, WORKERS, SHARDS, RUST)
 #
@@ -25,23 +27,28 @@ SHARDS="${SHARDS:-64}"
 LINK="/tmp/incc_bshim.o -L/usr/local/lib -lnauty"
 NAUTY_INC="$(dirname "$(find /usr/include /usr/local/include -name nauty.h 2>/dev/null | head -1)")"
 Q=$((N-2))
+# LINC_Q = L_inc(N-2), the sweep gate. It is the FULL inclusive-labeled count of
+# the (N-2)-vertex games, i.e. it must already include every nullity stratum for
+# N-2 (see the high-strata loop below). L_inc(10) here includes L8 = 8,884,050.
 case "$N" in
-  8)  LINC_Q=130950        # L_inc(6): strata + brute + sweep, 3 routes
+  8)  LINC_Q=130950                 # L_inc(6)
       EXPECT=1198013 ;;
-  10) LINC_Q=46778967018   # L_inc(8): strata ground truth
+  10) LINC_Q=46778967018            # L_inc(8): complete (no nullity-8 at n=8)
       EXPECT="" ;;
-  *)  echo "N must be 8 or 10 (nullity-8 strata not built)"; exit 1 ;;
+  12) LINC_Q=1297146370885586550    # L_inc(10) = L2+L4+L6+L8 (incl. nullity-8)
+      EXPECT="" ;;
+  *)  echo "N must be even in 8..=16 (dimension caps are width-16)"; exit 1 ;;
 esac
-LINC_TABLE="2=0,3=2,4=42,5=978,6=130950,7=49473198,8=46778967018,9=235837146265362"
+LINC_TABLE="2=0,3=2,4=42,5=978,6=130950,7=49473198,8=46778967018,9=235837146265362,10=1297146370885586550"
 mkdir -p "$WORK/strata" "$WORK/sigma"
 
 gcc -O2 -c "$RUST/balanced_shim.c" -I"$NAUTY_INC" -o /tmp/incc_bshim.o
-rustc -O -C target-cpu=native "$RUST/inc10.rs"        -o /tmp/c_inc10  -C link-args="$LINK"
-rustc -O -C target-cpu=native "$RUST/inc_hi.rs"         -o /tmp/c_inc4   -C link-args="$LINK"
-rustc -O -C target-cpu=native "$RUST/f3x.rs"          -o /tmp/c_f3x    -C link-args="$LINK"
-rustc -O -C target-cpu=native "$RUST/sigma_sweep.rs"  -o /tmp/c_ssweep -C link-args="$LINK"
-rustc -O -C target-cpu=native "$RUST/sigma_ktuple.rs" -o /tmp/c_ktup   -C link-args="$LINK"
-rustc -O -C target-cpu=native "$RUST/sigma_fix.rs"    -o /tmp/c_sfix
+rustc -O -C target-cpu=native -C overflow-checks=on "$RUST/inc10.rs"        -o /tmp/c_inc10  -C link-args="$LINK"
+rustc -O -C target-cpu=native -C overflow-checks=on "$RUST/inc_stratum.rs"         -o /tmp/c_incstrat   -C link-args="$LINK"
+rustc -O -C target-cpu=native -C overflow-checks=on "$RUST/f3x.rs"          -o /tmp/c_f3x    -C link-args="$LINK"
+rustc -O -C target-cpu=native -C overflow-checks=on "$RUST/sigma_sweep.rs"  -o /tmp/c_ssweep -C link-args="$LINK"
+rustc -O -C target-cpu=native -C overflow-checks=on "$RUST/sigma_ktuple.rs" -o /tmp/c_ktup   -C link-args="$LINK"
+rustc -O -C target-cpu=native -C overflow-checks=on "$RUST/sigma_fix.rs"    -o /tmp/c_sfix
 
 # ---------------- phase 1: strata ----------------
 cd "$WORK/strata"
@@ -50,23 +57,39 @@ seq 0 $((SHARDS-1)) | xargs -P"$WORKERS" -I@ bash -c '
   s=@
   [ -f shard_$s.done ] && exit 0
   fd="fifo_$s"; rm -rf "$fd"; mkdir "$fd"
-  mkfifo "$fd/a" "$fd/b" "$fd/c" "$fd/d"
+  mkfifo "$fd/a" "$fd/b" "$fd/d"
   /tmp/c_inc10 "$N" < "$fd/a" 2>/dev/null | grep -o "L_nullity2_labeled=[0-9]*" > s2_$s.txt & p1=$!
-  /tmp/c_f3x "$Q" 3 u < "$fd/b" 2>/dev/null > p3_$s.d6 & p2=$!
-  /tmp/c_f3x "$Q" 5 u < "$fd/c" 2>/dev/null > p5_$s.d6 & p3=$!
+  # fused f3x: d=3 stream to stdout, d=5 stream to the path arg -- one kernel
+  # computation per orientation instead of a second full stream pass
+  /tmp/c_f3x "$Q" 3 u p5_$s.d6 < "$fd/b" 2>/dev/null > p3_$s.d6 & p2=$!
   /tmp/c_ssweep "$Q" < "$fd/d" 2>/dev/null | grep -E "^n=$Q " > sw_$s.txt & p4=$!
   nauty-geng "$Q" $s/'"$SHARDS"' 2>/dev/null | nauty-directg -o 2>/dev/null \
-    | tee "$fd/a" "$fd/b" "$fd/c" > "$fd/d"
-  wait $p1 $p2 $p3 $p4
+    | tee "$fd/a" "$fd/b" > "$fd/d"
+  wait $p1 $p2 $p4
   rm -rf "$fd"
   if [ ! -s s2_$s.txt ] || [ ! -s sw_$s.txt ]; then
     echo "shard $s: consumer output missing -- NOT marking done" >&2
     exit 1
   fi
+  # strata 4/6 per shard: f3x-unique partitions parent classes across shards,
+  # so partial sums add exactly (like L2) and the parent files can be deleted
+  # immediately -- the full-stream parent set would not fit on disk
+  wc -l < p3_$s.d6 > pc3_$s.txt
+  wc -l < p5_$s.d6 > pc5_$s.txt
+  /tmp/c_incstrat "$N"   < p3_$s.d6 | grep -o "L_nullity4_labeled=[0-9]*" > s4_$s.txt
+  /tmp/c_incstrat "$N" 6 < p5_$s.d6 | grep -o "L_nullity6_labeled=[0-9]*" > s6_$s.txt
+  if [ ! -s s4_$s.txt ] || [ ! -s s6_$s.txt ]; then
+    echo "shard $s: stratum-4/6 output missing -- NOT marking done" >&2
+    exit 1
+  fi
+  rm -f p3_$s.d6 p5_$s.d6
   touch shard_$s.done
-  echo "shard $s done ($(date +%H:%M:%S))"
+  echo "shard $s done, parents $(cat pc3_$s.txt)/$(cat pc5_$s.txt) ($(date +%H:%M:%S))"
 '
-awk -F= '{s+=$2} END{print s}' s2_*.txt > "$WORK/L2.txt"
+# EXACT integer sum (awk uses f64 doubles -> silently rounds values > 2^53;
+# L2 ~1.3e18 was corrupted by ~112). Python bignum has no precision ceiling.
+isum() { python3 -c "import glob,sys; print(sum(int(open(f).read().split('=')[-1]) for f in glob.glob(sys.argv[1]) if open(f).read().strip()))" "$1"; }
+isum 's2_*.txt' > "$WORK/L2.txt"
 echo "L2 = $(cat "$WORK/L2.txt")"
 
 # sigma sweep totals: L_inc(Q) GATE + the (2,2,1^{N-4}) formula
@@ -88,15 +111,45 @@ print(raw // (q * (q - 1)))
 PY
 echo "Fix_(2,2,1^$((N-4))) = $(cat "$WORK/fix_pairsweep.txt")  [sweep L_inc($Q) gate passed]"
 
-cat p3_*.d6 > parents_3.d6
-cat p5_*.d6 > parents_5.d6
-echo "parents: d=3 $(wc -l < parents_3.d6), d=5 $(wc -l < parents_5.d6)"
-/tmp/c_inc4 "$N"   < parents_3.d6 | grep -o "L_nullity4_labeled=[0-9]*" | cut -d= -f2 > "$WORK/L4.txt"
-/tmp/c_inc4 "$N" 6 < parents_5.d6 | grep -o "L_nullity6_labeled=[0-9]*" | cut -d= -f2 > "$WORK/L6.txt"
+pc3sum=$(python3 -c "import glob; print(sum(int(open(f).read()) for f in glob.glob('pc3_*.txt') if open(f).read().strip()))")
+pc5sum=$(python3 -c "import glob; print(sum(int(open(f).read()) for f in glob.glob('pc5_*.txt') if open(f).read().strip()))")
+echo "parents: d=3 $pc3sum, d=5 $pc5sum"
+isum 's4_*.txt' > "$WORK/L4.txt"
+isum 's6_*.txt' > "$WORK/L6.txt"
 echo "L4 = $(cat "$WORK/L4.txt")  L6 = $(cat "$WORK/L6.txt")"
-L10=$(( $(cat "$WORK/L2.txt") + $(cat "$WORK/L4.txt") + $(cat "$WORK/L6.txt") ))
+
+# ---- high-nullity strata L8, L10, ... (D = 8, 10, ..., N-2) ----
+# A rank-(N-D) inclusive game (e.g. the rank-2 rock-paper-scissors blow-ups) has
+# nullity D = N - rank. At N=8 the top such family is nullity-6 (in L6); at N>=10
+# it reaches nullity 8, 10, ... which L2+L4+L6 alone MISS. These families are
+# rare (low rank), so one extra non-fused f3x pass per stratum is cheap. Each
+# child nullity D comes from a parent of nullity D-1 (odd), i.e. f3x d=D-1, and
+# is counted by inc_stratum N D. f3x-unique partitions parent classes across shards,
+# so per-shard sums add exactly (same as L4/L6). The zero matrix (nullity N) is
+# never inclusive, so the top stratum is D = N-2.
+HI_SUM=""
+for ((D=8; D<=N-2; D+=2)); do
+  dd=$((D-1))
+  export D dd
+  seq 0 $((SHARDS-1)) | xargs -P"$WORKERS" -I@ bash -c '
+    s=@
+    [ -f hi_${D}_$s.done ] && exit 0
+    nauty-geng "$Q" $s/'"$SHARDS"' 2>/dev/null | nauty-directg -o 2>/dev/null \
+      | /tmp/c_f3x "$Q" "$dd" u 2>/dev/null > pD_${D}_$s.d6
+    /tmp/c_incstrat "$N" "$D" < pD_${D}_$s.d6 2>/dev/null \
+      | grep -o "L_nullity${D}_labeled=[0-9]*" > sD_${D}_$s.txt
+    if [ ! -s sD_${D}_$s.txt ]; then echo "shard $s stratum $D: no output" >&2; exit 1; fi
+    rm -f pD_${D}_$s.d6
+    touch hi_${D}_$s.done
+  '
+  isum "sD_${D}_*.txt" > "$WORK/L$D.txt"
+  echo "L$D = $(cat "$WORK/L$D.txt")"
+  HI_SUM="$HI_SUM + $(cat "$WORK/L$D.txt")"
+done
+
+L10=$(python3 -c "print($(cat "$WORK/L2.txt")+$(cat "$WORK/L4.txt")+$(cat "$WORK/L6.txt")$HI_SUM)")
 echo "$L10" > "$WORK/Linc_N.txt"
-echo "L_inc($N) = $L10"
+echo "L_inc($N) = L2+L4+L6${HI_SUM:+ + higher strata} = $L10"
 
 # ---------------- phase 2: heavy sigma types ----------------
 cd "$WORK/sigma"
@@ -121,7 +174,7 @@ if [ "$N" -ge 10 ]; then
     if [ ! -f fix_$safe.txt ]; then
       echo "=== brute $TYPE ($OF shards) ==="
       seq 0 $((OF-1)) | xargs -P"$WORKERS" -I@ sh -c "/tmp/c_sfix $TYPE @ $OF 2>/dev/null | grep -o 'fix=[0-9]*'" \
-        | awk -F= '{s+=$2} END{print s}' > fix_$safe.txt
+        | python3 -c "import sys; print(sum(int(l.split('=')[1]) for l in sys.stdin if l.strip()))" > fix_$safe.txt
     fi
     echo "$TYPE = $(cat fix_$safe.txt) [brute]"
     FIXES+=(--fix "$TYPE=$(cat fix_$safe.txt)")

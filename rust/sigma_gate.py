@@ -23,11 +23,12 @@ usage: sigma_gate.py n --linc 3=2,4=42,5=978,... [--fix TYPE=VALUE ...] [--plan]
           the sigma_sweep formula); overrides any strategy
   --plan  print the commands needed for missing heavy types instead of failing
 """
+import os
 import subprocess
 import sys
 from math import factorial, gcd
 
-SFIX = "/tmp/claude-1000/sfix"
+SFIX = os.environ.get("SFIX", "/tmp/c_sfix")
 BRUTE_SLOT_LIMIT = 15  # 3^15 ~ 14M bundle leaves: inline-quick
 
 def partitions(n, mx=None):
@@ -65,6 +66,53 @@ def bundle_slots(lam):
 def within_exp(lam):
     return sum((l - 1) // 2 for l in lam)
 
+def factorize(x):
+    f, d, p = {}, x, 2
+    while p * p <= d:
+        while d % p == 0:
+            f[p] = f.get(p, 0) + 1
+            d //= p
+        p += 1
+    if d > 1:
+        f[d] = f.get(d, 0) + 1
+    return f
+
+def fstr(f):
+    return " * ".join(f"{p}^{e}" if e > 1 else f"{p}" for p, e in sorted(f.items())) or "1"
+
+def diagnose(total, fact, n, contribs):
+    """Modular fingerprint on an integrality-gate failure. n! is n-smooth and
+    every multiplicity #sigma divides n!, so:
+      * a SINGLE wrong correction Fix_T requires #sigma_T | residual;
+      * a residual prime factor > n cannot come from any #sigma (only from a Fix
+        VALUE or the coefficient-1 identity term L_inc(n)).
+    The identity term is the usual suspect -- e.g. a MISSING nullity stratum
+    (this is exactly how the missing L8 was found at n=10)."""
+    r = total % fact
+    need = (-total) % fact  # add this (mod n!) to reach divisibility
+    rf = factorize(r)
+    big = [p for p in rf if p > n]
+    print(f"\n=== INTEGRALITY GATE FAILED: total not divisible by {n}! ===")
+    print(f"  residual r = total mod {n}! = {r} = {fstr(rf)}")
+    print(f"  to reach divisibility, some term is short by {need} (mod {n}!)")
+    cands = [(arg, cnt, need // cnt) for (arg, cnt, _fix) in contribs
+             if cnt and need % cnt == 0]
+    if big:
+        print(f"  residual has prime factor(s) {big} > n={n}: NO single #sigma "
+              f"correction can be solely responsible.")
+        print(f"  => PRIME SUSPECT: the identity term L_inc({n}) (coefficient 1).")
+        print(f"     Most likely a MISSING nullity stratum -- L_inc = sum of L_D "
+              f"over even D=2..n-2; a rank-2 (RPS-blow-up) family lands in "
+              f"nullity n-2. Check every even D through {n-2} is computed.")
+        print(f"     A missing identity stratum would be = {need} (mod {n}!).")
+    elif cands:
+        print(f"  candidate single-correction errors (#sigma | need):")
+        for arg, cnt, e in cands[:12]:
+            print(f"    type {arg}: #sigma={cnt}, implied Fix error e = {e} (mod {fact//cnt})")
+    else:
+        print(f"  no single correction type has #sigma | {need}: suspect the "
+              f"identity term L_inc({n}) or a multi-type error.")
+
 def main():
     n = int(sys.argv[1])
     linc = {}
@@ -79,6 +127,7 @@ def main():
             k, v = sys.argv[i + 1].split("=")
             fixed[k] = int(v)
     corrections = 0
+    contribs = []
     missing = []
     for lam in partitions(n):
         if lam == [1] * n:
@@ -101,6 +150,7 @@ def main():
                                  f"run sharded `sfix {arg} S OF` or sweep, pass --fix {arg}=V"))
             continue
         corrections += cnt * fix
+        contribs.append((arg, cnt, fix))
         print(f"  type {arg:24s} #sigma={cnt:9d}  fix={fix}  [{how}]")
     if missing:
         print("MISSING heavy types:")
@@ -117,7 +167,8 @@ def main():
         if total % fact == 0:
             print(f"n={n}: inclusive({n}) = {total // fact}")
         else:
-            print(f"n={n}: NOT DIVISIBLE by {n}! -- something is wrong")
+            diagnose(total, fact, n, contribs)
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
