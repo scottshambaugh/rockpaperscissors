@@ -1,4 +1,4 @@
-"""view.py — inspect a single fair RPS structure.
+"""view.py - inspect a single fair RPS structure.
 
 Examples:
     uv run view.py --n 3
@@ -53,7 +53,7 @@ def main():
     items = search(args.n)
     if not 0 <= args.index < len(items):
         raise SystemExit(
-            f"index {args.index} out of range — {args.kind}_n{args.n} has {len(items)} structures"
+            f"index {args.index} out of range - {args.kind}_n{args.n} has {len(items)} structures"
         )
     M, xs = items[args.index]
 

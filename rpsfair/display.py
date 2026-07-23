@@ -6,12 +6,12 @@ SYM = {1: "+", -1: "-", 0: "0"}
 
 
 def letter_labels(n):
-    """Return ['A', 'B', ..., n-th letter] — opt-in alternative to WTL."""
+    """Return ['A', 'B', ..., n-th letter] - opt-in alternative to WTL."""
     return [chr(ord("A") + i) for i in range(n)]
 
 
 def wtl_labels(M):
-    """Per-node 'W·T·L' profile strings — the default label scheme."""
+    """Per-node 'W·T·L' profile strings - the default label scheme."""
     M = np.asarray(M)
     return [f"{int((r == 1).sum())}·{int((r == 0).sum()) - 1}·{int((r == -1).sum())}" for r in M]
 

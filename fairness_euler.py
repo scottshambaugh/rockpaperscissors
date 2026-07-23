@@ -1,10 +1,10 @@
-"""fairness_euler.py — Euler diagram of the fairness tiers at n = 7.
+"""fairness_euler.py - Euler diagram of the fairness tiers at n = 7.
 
 Draws how the four fairness notions nest and overlap, all sitting inside a
 single outer rectangle of iso classes:
 regular ⊂ balanced ⊂ inclusive (a strict nested chain), with completely-mixed
 drawn as a crossing rounded rectangle (overlaps regular and balanced, spills
-into the inclusive-but-not-balanced area). Not area-proportional — every region
+into the inclusive-but-not-balanced area). Not area-proportional - every region
 is labelled with its exact count. Saves to plots/fairness_euler.png.
 
     uv run fairness_euler.py
@@ -111,7 +111,7 @@ axE.text(0.70, h_title_y - 15 * PT - 0.16,
          ha="left", va="top",
          fontsize=11.5, style="italic", color=INK_SOFT, zorder=8)
 
-# ============================================================ tier tags — each a
+# ============================================================ tier tags - each a
 # fixed gap below its own box top
 def tag(text, x, box, color, ha):
     axE.text(x, box.top - TAG_GAP, text, ha=ha, va="center",

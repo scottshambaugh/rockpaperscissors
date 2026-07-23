@@ -10,7 +10,7 @@ cd "$ROOT"
 
 # nauty.h from the distro package (/usr/include/...) or a source build (/usr/local/include)
 NAUTY_H="$(find /usr/include /usr/local/include -name nauty.h 2>/dev/null | head -1 || true)"
-[ -n "$NAUTY_H" ] || { echo "nauty.h not found — sudo apt install libnauty-dev (see rust/README.md)"; exit 1; }
+[ -n "$NAUTY_H" ] || { echo "nauty.h not found - sudo apt install libnauty-dev (see rust/README.md)"; exit 1; }
 NAUTY_INC="$(dirname "$NAUTY_H")"
 echo "nauty headers: $NAUTY_INC"
 

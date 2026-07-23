@@ -28,18 +28,18 @@ def pynauty_graph(M):
 
 Validated: `|Aut|` and canonical certificate match a brute n! oracle on
 RPS/RPSLS/COP/Paley₇/ring₆ and all 582 n=5 classes; every enumeration count
-(ISO, search, generation through n=6/n=8) is unchanged — and faster (n=6
+(ISO, search, generation through n=6/n=8) is unchanged - and faster (n=6
 generation ~17 s vs ~40–65 s before). Removed as dead/redundant: the refine-and-
 individualize helpers (`_refine`, `_wl_colors`, `_normalize`, `_nauty_search`,
 `canonical_key_nauty`) and the superseded `orbit_bytes`.
 
 ## What stays hand-rolled (on purpose)
 
-- `modular.py` (modular decomposition) — a different algorithm, not iso/automorphism.
-- `structure.orbit_hashes` / `matrix_hash` — the cheap per-candidate dedup for the
+- `modular.py` (modular decomposition) - a different algorithm, not iso/automorphism.
+- `structure.orbit_hashes` / `matrix_hash` - the cheap per-candidate dedup for the
   brute `_enumerate` (one hash/candidate beats one certificate/candidate over the
   millions of n≤6 labelings).
-- `rust/s2_count.rs`, `rust/regular_count.rs` — self-contained Rust (their refine+
+- `rust/s2_count.rs`, `rust/regular_count.rs` - self-contained Rust (their refine+
   individualize Aut code is local by design, validated against `search_regular`).
 
 ## Dependency
@@ -54,6 +54,6 @@ Rendered man pages for the tools we use are in this directory (`dreadnaut.txt`,
 `nauty-geng.txt`, `nauty-gentourng.txt`, `nauty-directg.txt`, `nauty-listg.txt`,
 `nauty-labelg.txt`, `nauty-amtog.txt`, `nauty-watercluster2.txt`,
 `nauty-converseg.txt`, `nauty-countg.txt`). The Debian `dreadnaut` man page is only
-a stub — the full dreadnaut command reference (the `d` digraph command, `x`
+a stub - the full dreadnaut command reference (the `d` digraph command, `x`
 canonical labeling, automorphism output) and library docs are in the **nauty &
 Traces User's Guide**: <https://pallini.di.uniroma1.it/> (McKay & Piperno).

@@ -1,4 +1,4 @@
-"""run.py — enumerate, rank, and visualize fair RPS structures across n."""
+"""run.py - enumerate, rank, and visualize fair RPS structures across n."""
 
 import argparse
 import os

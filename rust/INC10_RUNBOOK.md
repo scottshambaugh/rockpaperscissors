@@ -1,6 +1,6 @@
 # inclusive(10) production runbook
 
-> **Runner: `inc_census.sh N` — one N-parametric script for both the n=8
+> **Runner: `inc_census.sh N` - one N-parametric script for both the n=8
 > rehearsal and the n=10 production run.** `bash inc_census.sh 8` must end
 > with `REHEARSAL GATE PASSED: inclusive(8) = 1198013`; only then run
 > `bash inc_census.sh 10`. Same code path, same phases, same gates: the
@@ -42,7 +42,7 @@ The identity term L_inc(10) = L2 + L4 + L6 + L8.
 | L_inc(8) | 46,778,967,018 | strata: 45,897,886,776 + 880,869,360 + 210,882 |
 | L_inc(9) | **235,837,146,265,362** | labsum: CM 211,720,417,352,944 + hi 24,116,728,912,418 |
 | n=8 sigma gate | corrections = 1,524,917,142 | 20 brute + Fix_(2,1^6)=L_inc(7) (coprime rule) |
-| **n=8 assembly** | **(46,778,967,018 + 1,524,917,142)/8! = 1,198,013 EXACT** | **GATE PASSED — validates the entire pipeline** |
+| **n=8 assembly** | **(46,778,967,018 + 1,524,917,142)/8! = 1,198,013 EXACT** | **GATE PASSED - validates the entire pipeline** |
 
 ## n=10 sigma type strategy (41 nontrivial types)
 
